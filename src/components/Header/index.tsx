@@ -22,7 +22,7 @@ export default function Header() {
         <header className="fixed z-50 w-full flex items-center justify-center pt-4">
             <div className="home-container flex items-center justify-between px-10 border h-24 rounded-full backdrop-blur-xs bg-background/20">
                 <Link href="/">
-                    <Image src="/logo-text.svg" alt="Atomic Cash Logo" width={200} height={32} />
+                    <Image src="/logo-text.png" alt="Atomic Cash Logo" width={200} height={32} />
                 </Link>
                 <div className="flex gap-10 text-white/60">
                     <Link href="/" className={navLinkClass("/")}> 
@@ -35,7 +35,7 @@ export default function Header() {
                         Portfolio
                     </Link>
                     <Link href="/aUSD" className="text-gold! font-medium text-shadow-2xs text-lg">
-                        AUSD
+                        aUSD
                     </Link>
                     <a
                         href="https://docs.atomic.cash"

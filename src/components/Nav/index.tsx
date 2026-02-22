@@ -6,13 +6,13 @@ import Dock from "./Dock";
 
 const items = [
     { icon: <ArrowRightLeft size={24} />, label: "Swap", href: "/" },
-    { icon: <Cylinder size={24} />, label: "Pool", href: "/pools" },
+    { icon: <Cylinder size={24} />, label: "Pools", href: "/pools" },
     {
         icon: <Wallet size={24} />,
         label: "Portfolio",
         href: "/portfolio",
     },
-    { icon: <DollarSign size={24} />, label: "AUSD", href: "/aUSD" },
+    { icon: <DollarSign size={24} />, label: "aUSD", href: "/aUSD" },
 ];
 
 export default function Nav() {
