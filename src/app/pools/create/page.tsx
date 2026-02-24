@@ -314,7 +314,7 @@ export default function CreatePoolPage() {
 
   if (!isConnected || !address) {
     return (
-      <section className="w-screen pt-60 flex justify-center">
+      <section className="w-screen pt-44 flex justify-center">
         <div className="home-container">
           <Link
             href="/pools"
@@ -336,7 +336,7 @@ export default function CreatePoolPage() {
   }
 
   return (
-    <section className="w-screen pt-60 flex justify-center">
+    <section className="w-screen pt-44 flex justify-center">
       <div className="home-container max-w-xl">
         <Link
           href="/pools"

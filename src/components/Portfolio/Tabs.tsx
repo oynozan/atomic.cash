@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 type Props = {
-  active: "overview" | "tokens" | "activity";
+  active: "tokens" | "activity";
 };
 
 export default function PortfolioTabs({ active }: Props) {
@@ -14,15 +14,8 @@ export default function PortfolioTabs({ active }: Props) {
     "bg-background/40 text-muted-foreground hover:bg-background/70";
 
   return (
-    <div className="flex items-center gap-2 mb-4 text-xs">
-      <Link
-        href="/portfolio"
-        className={`${base} ${
-          active === "overview" ? activeCls : inactiveCls
-        }`}
-      >
-        Overview
-      </Link>
+    <div className="flex items-center gap-2 mb-6 text-xs">
+      {/* Overview tab intentionally removed – only Tokens & Activity remain */}
       <Link
         href="/portfolio/tokens"
         className={`${base} ${

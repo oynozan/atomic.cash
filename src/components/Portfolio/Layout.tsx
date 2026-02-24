@@ -4,9 +4,11 @@ import type { ReactNode } from "react";
 import PortfolioTabs from "@/components/Portfolio/Tabs";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import ConnectWallet from "@/components/Header/Connect";
+import PortfolioActions from "./Actions";
+import PortfolioOverviewContent from "./OverviewContent";
 
 type Props = {
-  active: "overview" | "tokens" | "activity";
+  active: "tokens" | "activity";
   children: ReactNode;
 };
 
@@ -36,6 +38,9 @@ export default function PortfolioLayout({ active, children }: Props) {
   return (
     <div className="home-container">
       <h1 className="text-4xl font-figtree font-bold mb-6">Portfolio</h1>
+      <PortfolioActions />
+      {/* Always show balance chart + weekly stats under actions */}
+      <PortfolioOverviewContent />
       <PortfolioTabs active={active} />
       {children}
     </div>

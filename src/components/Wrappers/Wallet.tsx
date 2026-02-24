@@ -126,7 +126,7 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             const existingNamespaces = provider.session?.namespaces ?? {};
             const hasBch = Object.prototype.hasOwnProperty.call(existingNamespaces, BCH_NAMESPACE);
             if (provider.session && !hasBch) {
-                await modal.disconnect();
+                // If there's an old incompatible session, just drop it from the provider.
                 await provider.disconnect();
             }
 
@@ -160,13 +160,30 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
     };
 
     const disconnectWallet = async () => {
-        if (!provider || !modal) return;
-        await modal.disconnect();
-        await provider.disconnect();
-        setAddress(null);
-        setSession(null);
-        if (typeof window !== "undefined") {
-            window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
+        if (!provider) {
+            setAddress(null);
+            setSession(null);
+            if (typeof window !== "undefined") {
+                window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
+            }
+            return;
+        }
+
+        try {
+            // Sadece aktif bir WC2 oturumu varsa disconnect çağır
+            if (provider.session) {
+                await provider.disconnect();
+            }
+        } catch (err) {
+            // Bazı durumlarda UniversalProvider "Please call connect() before enable()" hatası atabiliyor;
+            // burada sessizce yutuyoruz çünkü UI tarafında zaten adresi temizleyeceğiz.
+            console.error("[wallet] provider.disconnect failed", err);
+        } finally {
+            setAddress(null);
+            setSession(null);
+            if (typeof window !== "undefined") {
+                window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
+            }
         }
     };
 
@@ -193,6 +210,12 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
                 networks: [activeBchNetwork as Parameters<typeof createAppKit>[0]["networks"][number]],
                 universalProvider: p,
                 manualWCControl: true,
+                // Sadece WalletConnect QR kodu, altta wallet arama/listesi yok
+                allWallets: "HIDE",
+                enableWalletGuide: false,
+                features: {
+                    connectMethodsOrder: ["wallet"],
+                },
             });
 
             setProvider(p);

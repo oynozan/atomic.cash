@@ -4,7 +4,7 @@ import { ManagePoolsLink } from "@/components/Pools/ManageLink";
 
 export default function Pools() {
   return (
-    <section className="w-screen pt-60 flex justify-center">
+    <section className="w-screen pt-44 pb-32 flex justify-center">
       <div className="home-container">
         <CreatePoolCard />
         <div className="mt-12 mb-6 flex items-center justify-between gap-4">

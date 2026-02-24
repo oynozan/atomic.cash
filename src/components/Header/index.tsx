@@ -31,6 +31,12 @@ export default function Header() {
                     <Link href="/pools" className={navLinkClass("/pools")}> 
                         Pools
                     </Link>
+                    <Link href="/tokens" className={navLinkClass("/tokens")}> 
+                        Tokens
+                    </Link>
+                    <Link href="/trades" className={navLinkClass("/trades")}> 
+                        Trades
+                    </Link>
                     <Link href="/portfolio" className={navLinkClass("/portfolio")}> 
                         Portfolio
                     </Link>

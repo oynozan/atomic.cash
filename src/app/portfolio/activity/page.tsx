@@ -3,7 +3,7 @@ import PortfolioLayout from "@/components/Portfolio/Layout";
 
 export default function PortfolioActivityPage() {
   return (
-    <section className="w-screen pt-60 flex justify-center">
+    <section className="w-screen pt-44 flex justify-center">
       <PortfolioLayout active="activity">
         <PortfolioActivityFull />
       </PortfolioLayout>

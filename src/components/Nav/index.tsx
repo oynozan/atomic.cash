@@ -1,12 +1,14 @@
 "use client";
 
-import { ArrowRightLeft, Cylinder, DollarSign, Wallet } from "lucide-react";
+import { ArrowRightLeft, Cylinder, DollarSign, Wallet, LineChart, Coins } from "lucide-react";
 
 import Dock from "./Dock";
 
 const items = [
     { icon: <ArrowRightLeft size={24} />, label: "Swap", href: "/" },
     { icon: <Cylinder size={24} />, label: "Pools", href: "/pools" },
+    { icon: <Coins size={24} />, label: "Tokens", href: "/tokens" },
+    { icon: <LineChart size={24} />, label: "Trades", href: "/trades" },
     {
         icon: <Wallet size={24} />,
         label: "Portfolio",

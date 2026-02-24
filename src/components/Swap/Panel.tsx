@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, Github } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import ConnectWallet from "@/components/Header/Connect";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
@@ -181,6 +181,7 @@ function TokenSelectModal({
 export default function SwapPanel() {
     const { address, isConnected, session } = useWalletSession();
     const searchParams = useSearchParams();
+    const pathname = usePathname();
 
     const [direction, setDirection] = useState<Direction>("bch_to_token");
     const [inputAmount, setInputAmount] = useState("");
@@ -253,8 +254,9 @@ export default function SwapPanel() {
                 );
                 setTokens(list);
 
-                // If URL has ?token=category, try to preselect it
-                const urlToken = searchParams?.get("token");
+                // If URL has ?token=category or path /swap/[tokenCategory], preselect token
+                const tokenFromPath = pathname?.match(/^\/swap\/([a-fA-F0-9]+)$/)?.[1];
+                const urlToken = searchParams?.get("token") ?? tokenFromPath;
                 if (urlToken) {
                     const found = list.find(t => t.category === urlToken);
                     if (found) {
@@ -728,7 +730,7 @@ export default function SwapPanel() {
                             };
 
                             return (
-                                <div className="mt-1 flex items-center gap-1 text-[11px]">
+                                <div className="flex items-center gap-1 text-[11px]">
                                     {[25, 50, 75].map(pct => (
                                         <button
                                             key={pct}
