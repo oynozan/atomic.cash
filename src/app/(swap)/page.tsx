@@ -11,11 +11,6 @@ export default function Swap() {
                     <SwapPanel />
                 </div>
             </section>
-            <section className="w-screen py-24 flex justify-center bg-primary">
-                <div className="home-container">
-                    <h1 className="text-4xl font-figtree font-bold">Hello</h1>
-                </div>
-            </section>
         </>
     );
 }

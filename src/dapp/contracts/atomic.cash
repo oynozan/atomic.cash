@@ -1,0 +1,89 @@
+pragma cashscript ^0.12.0;
+
+contract Atomic(bytes20 poolOwnerPkh, bytes4 version) {
+    function swapExactInput() {
+        
+        require(version.length == 4);
+        
+        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;
+        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
+        require(inputToken == outputToken);
+        
+        require(tx.version == 2);
+        
+        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
+        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
+        require(inputBytecode == outputBytecode);
+        
+        int targetK = tx.inputs[this.activeInputIndex].value 
+                    * tx.inputs[this.activeInputIndex].tokenAmount;
+        
+        int tradeValue = abs(
+            tx.inputs[this.activeInputIndex].value 
+            - tx.outputs[this.activeInputIndex].value
+        );
+        int fee = (tradeValue * 3) / 1000;
+        
+        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) 
+                             * tx.outputs[this.activeInputIndex].tokenAmount;
+
+        require(effectiveOutputK >= targetK);
+    }
+
+    function swapExactOutput() {
+        
+        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;
+        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
+        require(inputToken == outputToken);
+        
+        require(tx.version == 2);
+        
+        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
+        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
+        require(inputBytecode == outputBytecode);
+        
+        int targetK = tx.inputs[this.activeInputIndex].value 
+                    * tx.inputs[this.activeInputIndex].tokenAmount;
+        
+        int tradeValue = abs(
+            tx.inputs[this.activeInputIndex].value 
+            - tx.outputs[this.activeInputIndex].value
+        );
+        int fee = (tradeValue * 3) / 1000;
+        
+        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) 
+                             * tx.outputs[this.activeInputIndex].tokenAmount;
+        
+        require(effectiveOutputK >= targetK);
+    }
+
+    function addLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {
+        
+        require(hash160(poolOwnerPk) == poolOwnerPkh);
+        require(checkSig(poolOwnerSig, poolOwnerPk));
+        
+        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;
+        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
+        require(inputToken == outputToken);
+        
+        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
+        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
+        require(inputBytecode == outputBytecode);
+    }
+
+    function removeLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {
+        
+        require(hash160(poolOwnerPk) == poolOwnerPkh);
+        require(checkSig(poolOwnerSig, poolOwnerPk));
+        
+        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;
+        if (tx.outputs[this.activeInputIndex].tokenAmount > 0) {
+            bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
+            require(inputToken == outputToken);
+            
+            bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
+            bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
+            require(inputBytecode == outputBytecode);
+        }
+    }
+}

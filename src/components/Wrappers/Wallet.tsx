@@ -3,9 +3,13 @@
 import { createAppKit } from "@reown/appkit/core";
 import SignClient from "@walletconnect/sign-client";
 import UniversalProvider from "@walletconnect/universal-provider";
+import type { SessionTypes } from "@walletconnect/types";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 export const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!;
+
+const isChipnet = process.env.NEXT_PUBLIC_NETWORK === "chipnet";
+
 export const bchMainnet = {
     id: "bch-mainnet",
     caipNetworkId: "bch:bitcoincash",
@@ -22,20 +26,42 @@ export const bchMainnet = {
         },
     },
 };
+
+export const bchChipnet = {
+    id: "bch-chipnet",
+    caipNetworkId: "bch:bchtest",
+    chainNamespace: "bch",
+    name: "Bitcoin Cash (Chipnet)",
+    nativeCurrency: {
+        name: "Bitcoin Cash",
+        symbol: "BCH",
+        decimals: 8,
+    },
+    rpcUrls: {
+        default: {
+            http: [],
+        },
+    },
+};
+
+/** Active network: chipnet if NEXT_PUBLIC_NETWORK=chipnet, otherwise mainnet */
+export const activeBchNetwork = isChipnet ? bchChipnet : bchMainnet;
+/** WalletConnect/CAIP-2 chain ID (bch:bitcoincash or bch:bchtest) */
+export const BCH_CHAIN_ID = activeBchNetwork.caipNetworkId;
+
 export const wcMetadata = {
     name: "Atomic Cash",
     description: "Experience seamless trading at instant",
     url: "https://atomic.cash",
     icons: ["https://www.walletconnect.com/icon.png"],
 };
-export const networks = [bchMainnet] as const;
+const ADDRESS_STORAGE_KEY = "atomic.cash:bchAddress";
+export const networks = [bchMainnet, bchChipnet] as const;
 export const signClient = await SignClient.init({
     projectId,
     relayUrl: "wss://relay.walletconnect.com",
     metadata: wcMetadata,
 });
-
-const BCH_CHAIN_ID = bchMainnet.caipNetworkId;
 const BCH_NAMESPACE = "bch";
 const BCH_METHODS = ["bch_getAddresses", "bch_signTransaction", "bch_signMessage"] as const;
 const BCH_EVENTS = ["addressesChanged"] as const;
@@ -53,6 +79,7 @@ type WalletState = {
     modal: ReturnType<typeof createAppKit> | null;
     initError: string | null;
     address: string | null;
+    session: SessionTypes.Struct | null;
     isConnected: boolean;
     isConnecting: boolean;
     connectWallet: () => Promise<void>;
@@ -73,6 +100,7 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
     const [modal, setModal] = useState<ReturnType<typeof createAppKit> | null>(null);
     const [initError, setInitError] = useState<string | null>(null);
     const [address, setAddress] = useState<string | null>(null);
+    const [session, setSession] = useState<SessionTypes.Struct | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
 
     const readAddress = async (p: UniversalProvider) => {
@@ -82,7 +110,11 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             return;
         }
         const first = addresses[0];
-        setAddress(typeof first === "string" ? getAddressFromCaipAccount(first) : null);
+        const addr = typeof first === "string" ? getAddressFromCaipAccount(first) : null;
+        setAddress(addr);
+        if (typeof window !== "undefined" && addr) {
+            window.localStorage.setItem(ADDRESS_STORAGE_KEY, addr);
+        }
     };
 
     const connectWallet = async () => {
@@ -117,6 +149,7 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
                 throw new Error("Connected session does not include BCH namespace.");
             }
 
+            setSession(session);
             await readAddress(provider);
         } catch (err) {
             modal?.close();
@@ -131,12 +164,22 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
         await modal.disconnect();
         await provider.disconnect();
         setAddress(null);
+        setSession(null);
+        if (typeof window !== "undefined") {
+            window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
+        }
     };
 
     const openWalletModal = async () => {
         if (!modal) return;
         await modal.open({ view: "Account" });
     };
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const stored = window.localStorage.getItem(ADDRESS_STORAGE_KEY);
+        if (stored) setAddress(stored);
+    }, []);
 
     useEffect(() => {
         (async () => {
@@ -147,7 +190,7 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
 
             const m = createAppKit({
                 projectId,
-                networks: [bchMainnet as Parameters<typeof createAppKit>[0]["networks"][number]],
+                networks: [activeBchNetwork as Parameters<typeof createAppKit>[0]["networks"][number]],
                 universalProvider: p,
                 manualWCControl: true,
             });
@@ -156,7 +199,8 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             setModal(m);
 
             const hasBch = Boolean(p.session?.namespaces?.[BCH_NAMESPACE]);
-            if (hasBch) {
+            if (hasBch && p.session) {
+                setSession(p.session as SessionTypes.Struct);
                 try {
                     await readAddress(p);
                 } catch {
@@ -182,7 +226,10 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             else setAddress(null);
         };
 
-        const handleDisconnect = () => setAddress(null);
+        const handleDisconnect = () => {
+            setAddress(null);
+            setSession(null);
+        };
 
         provider.on("accountsChanged", handleAccountsChanged);
         provider.on("disconnect", handleDisconnect);
@@ -200,6 +247,7 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
                 modal,
                 initError,
                 address,
+                session,
                 isConnected: !!address,
                 isConnecting,
                 connectWallet,

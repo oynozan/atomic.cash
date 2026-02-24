@@ -2,7 +2,7 @@ import { stringify } from "@bitauth/libauth";
 import { type WcTransactionObject } from "cashscript";
 import { type SessionTypes } from "@walletconnect/types";
 
-import { bchMainnet, signClient } from "@/components/Wrappers/Wallet";
+import { BCH_CHAIN_ID, signClient } from "@/components/Wrappers/Wallet";
 
 interface SignedTxObject {
     signedTransaction: string;
@@ -15,7 +15,7 @@ export async function signWcTransaction(
 ): Promise<SignedTxObject | undefined> {
     try {
         const result = await signClient.request<SignedTxObject>({
-            chainId: bchMainnet.caipNetworkId,
+            chainId: BCH_CHAIN_ID,
             topic: session?.topic,
             request: {
                 method: "bch_signTransaction",
