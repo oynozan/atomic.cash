@@ -253,6 +253,28 @@ export default function CreatePoolPage() {
         throw new Error(broadcastData.error || "Failed to broadcast");
       }
 
+      const txid: string | undefined = broadcastData?.txid || broadcastData?.transactionId;
+
+      if (txid) {
+        // Fire-and-forget: record pool creation for Activity
+        void fetch("/api/portfolio/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            txid,
+            address,
+            type: "create_pool",
+            tokenCategory: tokenCategory.trim(),
+            amounts: {
+              bchIn: bch,
+              tokenIn: token,
+            },
+          }),
+        }).catch(() => {
+          // Non-fatal: ignore logging errors
+        });
+      }
+
       await fetch("/api/registry/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

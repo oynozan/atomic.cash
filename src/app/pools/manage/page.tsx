@@ -389,6 +389,28 @@ async function handleAddLiquidity(
       throw new Error(broadcastData.error || "Failed to broadcast");
     }
 
+    const txid: string | undefined = broadcastData?.txid || broadcastData?.transactionId;
+
+    if (txid) {
+      // Fire-and-forget: record add-liquidity action for Activity
+      void fetch("/api/portfolio/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txid,
+          address,
+          type: "add_liquidity",
+          tokenCategory: pool.tokenCategory,
+          amounts: {
+            bchIn: data.bchAdded,
+            tokenIn: data.tokensAdded,
+          },
+        }),
+      }).catch(() => {
+        // Non-fatal: ignore logging errors
+      });
+    }
+
     toast.success("Liquidity added successfully.");
     onDone();
   } catch (err) {
@@ -456,6 +478,28 @@ async function handleRemoveLiquidity(
     const broadcastData = await broadcastRes.json();
     if (!broadcastRes.ok) {
       throw new Error(broadcastData.error || "Failed to broadcast");
+    }
+
+    const txid: string | undefined = broadcastData?.txid || broadcastData?.transactionId;
+
+    if (txid) {
+      // Fire-and-forget: record remove-liquidity action for Activity
+      void fetch("/api/portfolio/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txid,
+          address,
+          type: "remove_liquidity",
+          tokenCategory: pool.tokenCategory,
+          amounts: {
+            bchOut: data.bchWithdrawn,
+            tokenOut: data.tokensWithdrawn,
+          },
+        }),
+      }).catch(() => {
+        // Non-fatal: ignore logging errors
+      });
     }
 
     toast.success("Liquidity removed successfully.");

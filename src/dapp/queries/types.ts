@@ -236,6 +236,12 @@ export interface TxHistoryItem {
     txid: string;
     blockHeight: number;
     explorerUrl: string;
+    /** Direction of BCH value flow relative to the address */
+    direction?: 'sent' | 'received' | 'self';
+    /** Asset symbol (currently only BCH for chain history) */
+    asset?: 'BCH';
+    /** Net amount (absolute) in BCH */
+    amount?: number;
 }
 
 /**

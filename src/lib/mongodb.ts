@@ -30,6 +30,7 @@ function getClient(): Promise<MongoClient> {
 
 export const DB_NAME = "atomic_cash";
 export const COLLECTION_POOL_OWNERS = "pool_owners";
+export const COLLECTION_TRANSACTIONS = "transactions";
 
 export async function getDb() {
   const client = await getClient();
@@ -44,4 +45,31 @@ export async function getPoolOwnersCollection() {
     label?: string;
     registeredAt: number;
   }>(COLLECTION_POOL_OWNERS);
+}
+
+export interface StoredTransaction {
+  /** On-chain txid */
+  txid: string;
+  /** User token-aware address that initiated the action */
+  address: string;
+  /** High-level type of dapp action */
+  type: "swap" | "create_pool" | "add_liquidity" | "remove_liquidity";
+  /** Optional swap direction (for swaps only) */
+  direction?: "bch_to_token" | "token_to_bch";
+  /** Optional token category involved in the action */
+  tokenCategory?: string;
+  /** Human-readable amount details, depends on type */
+  amounts?: {
+    bchIn?: number;
+    bchOut?: number;
+    tokenIn?: number;
+    tokenOut?: number;
+  };
+  /** Unix timestamp (ms) when we recorded this action */
+  createdAt: number;
+}
+
+export async function getTransactionsCollection() {
+  const db = await getDb();
+  return db.collection<StoredTransaction>(COLLECTION_TRANSACTIONS);
 }

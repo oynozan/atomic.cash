@@ -477,9 +477,9 @@ export default function SwapPanel() {
             }
 
             const broadcastRes = await fetch("/api/tx/broadcast", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
             });
             const broadcastData = await broadcastRes.json();
             if (!broadcastRes.ok) {
@@ -493,6 +493,30 @@ export default function SwapPanel() {
                     ? `Swap submitted successfully. TxID: ${txid}`
                     : "Swap submitted successfully.",
             );
+
+            if (txid) {
+                // Fire-and-forget: record this swap in Mongo for detailed activity view
+                void fetch("/api/portfolio/transactions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        txid,
+                        address,
+                        type: "swap",
+                        direction,
+                        tokenCategory: selectedToken.category,
+                        amounts: {
+                            // For now we only persist human-readable amounts;
+                            // they are sufficient for the Activity summary.
+                            ...(direction === "bch_to_token"
+                                ? { bchIn: value, tokenOut: data.outputAmount }
+                                : { tokenIn: value, bchOut: data.outputAmount }),
+                        },
+                    }),
+                }).catch(() => {
+                    // Non-fatal: ignore logging errors
+                });
+            }
 
             // Reset form state after successful swap
             setInputAmount("");

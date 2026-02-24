@@ -1,16 +1,8 @@
 import { decodeCashAddress } from '@bitauth/libauth';
-import { NETWORK } from '../config';
-import { Network } from '../types';
 import { NetworkProvider } from 'cashscript';
 import { provider } from '../common';
 import type { TxHistoryItem, TxHistoryResult, GetTxHistoryParams } from './types';
-
-function getExplorerUrl(txid: string): string {
-    if (NETWORK === Network.MAINNET) {
-        return `https://blockchair.com/bitcoin-cash/transaction/${txid}`;
-    }
-    return `https://chipnet.chaingraph.cash/tx/${txid}`;
-}
+import { getExplorerUrl } from '../explorer';
 
 /**
  * Normalize address (basic validation + lowercasing prefix)
@@ -23,51 +15,50 @@ function normalizeAddress(address: string): string | null {
 }
 
 /**
- * Get transaction history for an address
+ * Get transaction history for an address.
+ *
+ * - Uses Electrum address history
+ * - Returns the newest N txids (no pagination – intended for UI overviews)
+ * - Script / contract etkileşimleri, `/api/portfolio/history` tarafında
+ *   Mongo dapp kayıtları ile txid bazında zaten ayrıştırılıyor.
  */
 export async function getTxHistory(params: GetTxHistoryParams): Promise<TxHistoryResult> {
-    const { address, limit = 20, cursor = 0 } = params;
-    
+    const { address, limit = 5 } = params;
+
     const normalized = normalizeAddress(address);
     if (!normalized) {
         return { transactions: [], total: 0, hasMore: false };
     }
-    
+
     try {
-        // Electrum raw request (ElectrumNetworkProvider specific)
         const electrum = provider as NetworkProvider & {
             performRequest: (method: string, ...params: unknown[]) => Promise<unknown>;
         };
-        // Use address-based history so token-aware outputs are also included.
+
         const history = await electrum.performRequest(
             'blockchain.address.get_history',
             normalized
         ) as Array<{ tx_hash: string; height: number }>;
-        
+
         if (!history || history.length === 0) {
             return { transactions: [], total: 0, hasMore: false };
         }
-        
-        // Sort by height (newest to oldest)
+
+        // Newest first
         const sorted = [...history].sort((a, b) => b.height - a.height);
-        
-        // Pagination
-        const total = sorted.length;
-        const slice = sorted.slice(cursor, cursor + limit);
-        
-        const transactions: TxHistoryItem[] = slice.map(item => ({
+        const slice = sorted.slice(0, limit);
+
+        const transactions: TxHistoryItem[] = slice.map((item) => ({
             txid: item.tx_hash,
             blockHeight: item.height,
             explorerUrl: getExplorerUrl(item.tx_hash),
         }));
-        
-        const endIndex = cursor + transactions.length;
-        
+
         return {
             transactions,
-            total,
-            hasMore: endIndex < total,
-            nextCursor: endIndex < total ? endIndex : undefined,
+            total: transactions.length,
+            hasMore: false,
+            nextCursor: undefined,
         };
     } catch (error: unknown) {
         if (error instanceof Error) {

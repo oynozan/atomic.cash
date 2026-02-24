@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import ConnectWallet from "@/components/Header/Connect";
 
@@ -29,7 +30,7 @@ function formatAmount(value: number, maxDecimals = 6): string {
   return parseFloat(s).toString();
 }
 
-export default function PortfolioTable() {
+export default function PortfolioTable({ showViewAllLink = true }: { showViewAllLink?: boolean }) {
   const { address, isConnected } = useWalletSession();
   const [data, setData] = useState<BalancesResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,7 +91,15 @@ export default function PortfolioTable() {
     }
   }
 
-  const tokenCount = rows.length;
+  // BCH her zaman en üstte, sonra en büyük bakiyeye sahip tokenlar
+  const bchRow = rows.find((r) => r.type === "bch");
+  const tokenRows = rows
+    .filter((r) => r.type === "token")
+    .sort((a, b) => b.amount - a.amount);
+
+  // Overview kartında BCH + en fazla 3 token gösterelim (toplam 4 satır)
+  const visibleTokens = tokenRows.slice(0, 3);
+  const tokenCount = tokenRows.length + (bchRow ? 1 : 0);
 
   if (!isConnected || !address) {
     return (
@@ -144,6 +153,14 @@ export default function PortfolioTable() {
             {tokenCount} token{tokenCount > 1 ? "s" : ""}
           </div>
         </div>
+        {showViewAllLink && (
+          <Link
+            href="/portfolio/tokens"
+            className="text-[11px] font-medium text-primary hover:underline"
+          >
+            View all tokens →
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)] px-5 py-2 text-[11px] text-muted-foreground border-b">
@@ -152,17 +169,32 @@ export default function PortfolioTable() {
       </div>
 
       <div>
-        {rows.map((row, i) => (
+        {bchRow && (
+          <div className="flex items-center w-full py-3 px-5 gap-4 bg-background/20">
+            <div className="flex items-center gap-2 min-w-[120px]">
+              <Image src="/icons/bch.svg" alt="BCH" width={24} height={24} />
+              <div className="flex flex-col">
+                <span className="font-medium text-sm">BCH</span>
+                <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
+                  Bitcoin Cash
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 text-right text-sm font-mono tabular-nums">
+              {formatAmount(bchRow.amount)}
+            </div>
+          </div>
+        )}
+
+        {visibleTokens.map((row, i) => (
           <div
-            key={row.type === "bch" ? "bch" : row.category ?? i}
+            key={row.category ?? i}
             className={`flex items-center w-full py-3 px-5 gap-4 ${
               i % 2 === 0 ? "bg-background/30" : "bg-background/10"
             }`}
           >
             <div className="flex items-center gap-2 min-w-[120px]">
-              {row.type === "bch" ? (
-                <Image src="/icons/bch.svg" alt="BCH" width={24} height={24} />
-              ) : row.iconUrl ? (
+              {row.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- BCMR icon URLs are dynamic (various domains)
                 <img
                   src={row.iconUrl}
