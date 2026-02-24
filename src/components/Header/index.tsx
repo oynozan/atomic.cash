@@ -24,7 +24,7 @@ export default function Header() {
                 <Link href="/">
                     <Image src="/logo-text.png" alt="Atomic Cash Logo" width={200} height={32} />
                 </Link>
-                <div className="flex gap-10 text-white/60">
+                <div className="flex gap-5 text-white/60">
                     <Link href="/" className={navLinkClass("/")}> 
                         Swap
                     </Link>

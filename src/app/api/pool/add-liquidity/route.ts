@@ -35,6 +35,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const hasBch = typeof bchAmount === "number" && Number.isFinite(bchAmount) && bchAmount > 0;
+  const hasToken = typeof tokenAmount === "number" && Number.isFinite(tokenAmount) && tokenAmount > 0;
+  if (!hasBch && !hasToken) {
+    return NextResponse.json(
+      { error: "At least one of bchAmount or tokenAmount is required and must be a positive number" },
+      { status: 400 },
+    );
+  }
+
   try {
     const result = await addLiquidity(
       {

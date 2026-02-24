@@ -6,7 +6,8 @@ import UniversalProvider from "@walletconnect/universal-provider";
 import type { SessionTypes } from "@walletconnect/types";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!;
+const rawProjectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
+export const projectId = rawProjectId?.trim() || "";
 
 const isChipnet = process.env.NEXT_PUBLIC_NETWORK === "chipnet";
 
@@ -199,6 +200,10 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
     }, []);
 
     useEffect(() => {
+        if (!projectId) {
+            setInitError("WalletConnect project ID is not configured (NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID).");
+            return;
+        }
         (async () => {
             const p = await UniversalProvider.init({
                 projectId,

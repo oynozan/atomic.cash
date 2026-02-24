@@ -36,6 +36,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const hasWithdrawAll = withdrawAll === true;
+  const hasPercentage =
+    typeof percentage === "number" && Number.isFinite(percentage) && percentage >= 1 && percentage <= 100;
+  const hasBchAmount =
+    typeof bchAmount === "number" && Number.isFinite(bchAmount) && bchAmount > 0;
+  if (!hasWithdrawAll && !hasPercentage && !hasBchAmount) {
+    return NextResponse.json(
+      { error: "Provide either withdrawAll: true, or percentage (1–100), or a positive bchAmount" },
+      { status: 400 },
+    );
+  }
+
   try {
     const result = await removeLiquidity(
       {

@@ -186,15 +186,15 @@ export default function CreatePoolPage() {
         return;
       }
       if (lastEdited === "bch") {
-        if (parsedBch === undefined || Number.isNaN(parsedBch)) {
-          toast.error("Enter BCH amount.");
+        if (parsedBch === undefined || Number.isNaN(parsedBch) || parsedBch <= 0) {
+          toast.error("Enter a valid positive BCH amount.");
           return;
         }
         bch = parsedBch;
         token = undefined; // let backend compute exact token amount
       } else {
-        if (parsedToken === undefined || Number.isNaN(parsedToken)) {
-          toast.error("Enter token amount.");
+        if (parsedToken === undefined || Number.isNaN(parsedToken) || parsedToken <= 0) {
+          toast.error("Enter a valid positive token amount.");
           return;
         }
         token = parsedToken;
@@ -205,10 +205,12 @@ export default function CreatePoolPage() {
       if (
         parsedBch === undefined ||
         Number.isNaN(parsedBch) ||
+        parsedBch <= 0 ||
         parsedToken === undefined ||
-        Number.isNaN(parsedToken)
+        Number.isNaN(parsedToken) ||
+        parsedToken <= 0
       ) {
-        toast.error("For the first pool, provide both BCH and token amounts.");
+        toast.error("For the first pool, provide both BCH and token amounts (positive numbers).");
         return;
       }
       bch = parsedBch;
@@ -275,7 +277,7 @@ export default function CreatePoolPage() {
         });
       }
 
-      await fetch("/api/registry/register", {
+      const registerRes = await fetch("/api/registry/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -283,6 +285,12 @@ export default function CreatePoolPage() {
           address,
         }),
       });
+      if (!registerRes.ok) {
+        const regData = await registerRes.json().catch(() => ({}));
+        toast.warning(
+          regData?.error ?? "Pool created but failed to add to list. You can still use the pool."
+        );
+      }
 
       toast.success("Pool created successfully!");
       router.push("/pools");

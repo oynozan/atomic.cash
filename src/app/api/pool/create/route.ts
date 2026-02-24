@@ -57,11 +57,11 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+    if (!result.success || !result.unsignedTx) {
+      return NextResponse.json({ error: result.error ?? "Failed to build create-pool transaction" }, { status: 400 });
     }
 
-    const wcTransactionJson = templateToWcTransactionObject(result.unsignedTx!, {
+    const wcTransactionJson = templateToWcTransactionObject(result.unsignedTx, {
       broadcast: false,
       userPrompt: "Create Pool",
     });
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       poolBch: result.poolBch.toString(),
       poolTokens: result.poolTokens.toString(),
       initialPrice: result.initialPrice,
-      poolOwnerPkhHex: result.unsignedTx!.poolOwnerPkhHex,
+      poolOwnerPkhHex: result.unsignedTx.poolOwnerPkhHex,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create pool";

@@ -37,8 +37,17 @@ export async function POST(request: NextRequest) {
   if (!address || typeof address !== "string" || address.trim() === "") {
     return NextResponse.json({ error: "address is required" }, { status: 400 });
   }
-  if (!type) {
-    return NextResponse.json({ error: "type is required" }, { status: 400 });
+  const allowedTypes: StoredTransaction["type"][] = [
+    "swap",
+    "create_pool",
+    "add_liquidity",
+    "remove_liquidity",
+  ];
+  if (!type || !allowedTypes.includes(type)) {
+    return NextResponse.json(
+      { error: "type is required and must be one of: swap, create_pool, add_liquidity, remove_liquidity" },
+      { status: 400 }
+    );
   }
 
   const trimmedTxid = txid.trim();

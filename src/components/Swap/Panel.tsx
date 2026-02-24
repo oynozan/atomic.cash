@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Github } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -215,6 +215,7 @@ export default function SwapPanel() {
         [tokens, tokenBalances],
     );
     const [lastEdited, setLastEdited] = useState<"input" | "output">("input");
+    const quoteAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -562,6 +563,7 @@ export default function SwapPanel() {
 
         const run = async () => {
             const controller = new AbortController();
+            quoteAbortRef.current = controller;
             setIsQuoting(true);
             try {
                 const res = await fetch("/api/swap/quote", {
@@ -584,30 +586,46 @@ export default function SwapPanel() {
                     return;
                 }
 
-                const q = data.quote as {
-                    inputAmount: number;
-                    outputAmount: number;
-                    priceImpact: number;
-                    effectivePrice: number;
-                    feeAmount: number;
-                };
+                const raw = data?.quote;
+                const hasQuote =
+                    raw &&
+                    typeof raw === "object" &&
+                    typeof raw.inputAmount === "number" &&
+                    Number.isFinite(raw.inputAmount) &&
+                    typeof raw.outputAmount === "number" &&
+                    Number.isFinite(raw.outputAmount) &&
+                    typeof raw.priceImpact === "number" &&
+                    Number.isFinite(raw.priceImpact) &&
+                    typeof raw.effectivePrice === "number" &&
+                    Number.isFinite(raw.effectivePrice);
+                const feeVal =
+                    typeof raw?.feeAmount === "number" && Number.isFinite(raw.feeAmount)
+                        ? raw.feeAmount
+                        : typeof raw?.fee === "number" && Number.isFinite(raw.fee)
+                          ? raw.fee
+                          : 0;
+
+                if (!hasQuote || cancelled) {
+                    if (!cancelled && !hasQuote) {
+                        toast.error("Invalid quote response. Please try again.");
+                    }
+                    return;
+                }
 
                 setQuote({
-                    inputAmount: q.inputAmount,
-                    outputAmount: q.outputAmount,
-                    priceImpact: q.priceImpact,
-                    effectivePrice: q.effectivePrice,
-                    fee: q.feeAmount,
+                    inputAmount: raw.inputAmount,
+                    outputAmount: raw.outputAmount,
+                    priceImpact: raw.priceImpact,
+                    effectivePrice: raw.effectivePrice,
+                    fee: feeVal,
                 });
-                setPriceImpact(q.priceImpact);
-                setEffectivePrice(q.effectivePrice);
+                setPriceImpact(raw.priceImpact);
+                setEffectivePrice(raw.effectivePrice);
 
                 if (swapType === "exact_input") {
-                    // user edited the input side; update output
-                    setOutputAmount(q.outputAmount.toString());
+                    setOutputAmount(raw.outputAmount.toString());
                 } else {
-                    // user edited the output side; update input
-                    setInputAmount(q.inputAmount.toString());
+                    setInputAmount(raw.inputAmount.toString());
                 }
             } catch (err) {
                 if (cancelled) return;
@@ -621,6 +639,7 @@ export default function SwapPanel() {
                 setEffectivePrice(null);
             } finally {
                 if (!cancelled) setIsQuoting(false);
+                quoteAbortRef.current = null;
             }
         };
 
@@ -633,6 +652,8 @@ export default function SwapPanel() {
 
         return () => {
             cancelled = true;
+            quoteAbortRef.current?.abort();
+            quoteAbortRef.current = null;
             if (timeoutId) clearTimeout(timeoutId);
         };
     }, [direction, swapType, lastEdited, inputAmount, outputAmount, slippage, selectedToken]);
