@@ -63,8 +63,8 @@ export default function PortfolioTable({ showViewAllLink = true }: { showViewAll
     .filter((r) => r.type === "token")
     .sort((a, b) => b.amount - a.amount);
 
-  // Overview kartında BCH + en fazla 3 token gösterelim (toplam 4 satır)
-  const visibleTokens = tokenRows.slice(0, 3);
+  // Overview kartında BCH + tüm tokenlar gösterilsin
+  const visibleTokens = tokenRows;
   const tokenCount = tokenRows.length + (bchRow ? 1 : 0);
 
   if (!isConnected || !address) {
