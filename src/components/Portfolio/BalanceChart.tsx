@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-type BalancePoint = { timestamp: number; valueBch: number; bch: number };
-
-type BalanceHistoryResponse = {
-  points: BalancePoint[];
-  swapsThisWeek?: number;
-  swappedThisWeekBch?: number;
-};
+import {
+  usePortfolioBalanceHistoryStore,
+  type BalanceHistoryResponse,
+} from "@/store/portfolioBalanceHistory";
 
 const RANGES = [
   { key: "24h", label: "1D", ms: 24 * 60 * 60 * 1000 },
@@ -31,46 +27,47 @@ export default function PortfolioBalanceChart({
   address: string;
   initialData?: BalanceHistoryResponse | null;
 }) {
+  const getCached = usePortfolioBalanceHistoryStore((s) => s.getCached);
+  const fetchHistory = usePortfolioBalanceHistoryStore((s) => s.fetch);
   const [range, setRange] = useState<"24h" | "7d" | "30d" | "90d">("30d");
   const [data, setData] = useState<BalanceHistoryResponse | null>(
-    initialData ?? null,
+    initialData ?? getCached(address) ?? null,
   );
-  const [loading, setLoading] = useState(!initialData);
+  const [loading, setLoading] = useState(!initialData && !getCached(address));
   const [error, setError] = useState<string | null>(null);
 
+  // Only fetch when no initialData and no cache (store handles TTL)
   useEffect(() => {
-    if (!address || initialData != null) return;
+    if (!address) return;
+    if (initialData != null) {
+      setData(initialData);
+      setLoading(false);
+      return;
+    }
+    const cached = getCached(address);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(
-      `/api/portfolio/balance-history?address=${encodeURIComponent(address)}`,
-    )
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
+    fetchHistory(address).then((result) => {
+      if (!cancelled) {
+        if (result) {
+          setData(result);
+          setError(null);
+        } else {
+          setError("Failed to load balance history");
         }
-        return res.json();
-      })
-      .then((json: BalanceHistoryResponse) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load balance history",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        setLoading(false);
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [address, initialData]);
+  }, [address, initialData, getCached, fetchHistory]);
 
   useEffect(() => {
     if (initialData != null) {

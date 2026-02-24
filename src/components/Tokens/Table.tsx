@@ -3,23 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-
-type TokenOverview = {
-  tokenCategory: string;
-  symbol?: string;
-  name?: string;
-  iconUrl?: string;
-  priceBch: number | null;
-  tvlBch: number;
-  volume30dBch: number;
-  change1dPercent: number | null;
-  change7dPercent: number | null;
-};
-
-type TokensResponse = {
-  tokens: TokenOverview[];
-  total: number;
-};
+import { useTokensOverviewStore, type TokenOverview, type TokensOverviewResponse } from "@/store/tokensOverview";
 
 function formatNumber(n: number | null, maxDecimals = 6): string {
   if (n == null || !Number.isFinite(n)) return "-";
@@ -37,41 +21,12 @@ function formatPercent(n: number | null): { label: string; positive: boolean } {
 }
 
 export default function TokensTable() {
-  const [data, setData] = useState<TokensResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, fetch: fetchTokens } = useTokensOverviewStore();
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetch("/api/tokens/overview")
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        }
-        return res.json();
-      })
-      .then((json: TokensResponse) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load tokens");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    fetchTokens();
+  }, [fetchTokens]);
 
   const tokens = data?.tokens ?? [];
 

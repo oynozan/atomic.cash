@@ -18,6 +18,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signWcTransaction } from "@/lib/web3";
 import { formatError } from "@/lib/utils";
+import { useTokenPriceStore } from "@/store/tokenPrice";
+import { usePoolsStore } from "@/store/pools";
+import { useTokensOverviewStore } from "@/store/tokensOverview";
 
 type TokenItem = {
   category: string;
@@ -104,6 +107,7 @@ export default function CreatePoolPage() {
   }, [balances, selectedToken]);
 
   const tokenCategory = selectedToken?.category ?? "";
+  const fetchTokenPrice = useTokenPriceStore((s) => s.fetchPrice);
   useEffect(() => {
     if (!tokenCategory) {
       setHasMarketPools(false);
@@ -111,30 +115,20 @@ export default function CreatePoolPage() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/pools/price?tokenCategory=${encodeURIComponent(tokenCategory)}`)
-      .then((res) => {
-        if (!res.ok) return res.json().then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        return res.json();
-      })
-      .then((json: { hasMarketPools?: boolean; marketPrice?: number }) => {
-        if (cancelled) return;
-        setHasMarketPools(Boolean(json.hasMarketPools));
-        setMarketPrice(
-          typeof json.marketPrice === "number" && Number.isFinite(json.marketPrice)
-            ? json.marketPrice
-            : null,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHasMarketPools(false);
-          setMarketPrice(null);
-        }
-      });
+    fetchTokenPrice(tokenCategory).then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setHasMarketPools(result.hasMarketPools);
+        setMarketPrice(Number.isFinite(result.marketPrice) ? result.marketPrice : null);
+      } else {
+        setHasMarketPools(false);
+        setMarketPrice(null);
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [tokenCategory]);
+  }, [tokenCategory, fetchTokenPrice]);
 
   // Check if user already has a pool for selected token
   useEffect(() => {
@@ -293,6 +287,8 @@ export default function CreatePoolPage() {
       }
 
       toast.success("Pool created successfully!");
+      usePoolsStore.getState().invalidate();
+      useTokensOverviewStore.getState().invalidate();
       router.push("/pools");
     } catch (err) {
       toast.error(formatError(err));

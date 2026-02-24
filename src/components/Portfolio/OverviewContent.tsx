@@ -4,43 +4,32 @@ import { useEffect, useState } from "react";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import PortfolioBalanceChart from "@/components/Portfolio/BalanceChart";
 import SwapThisWeekCard from "@/components/Portfolio/SwapThisWeekCard";
-
-type BalanceHistoryResponse = {
-  points: { timestamp: number; valueBch: number; bch: number }[];
-  swapsThisWeek: number;
-  swappedThisWeekBch: number;
-};
+import {
+  usePortfolioBalanceHistoryStore,
+  type BalanceHistoryResponse,
+} from "@/store/portfolioBalanceHistory";
 
 export default function PortfolioOverviewContent() {
   const { address } = useWalletSession();
-  const [balanceData, setBalanceData] = useState<BalanceHistoryResponse | null>(
-    null,
-  );
+  const getCached = usePortfolioBalanceHistoryStore((s) => s.getCached);
+  const fetchHistory = usePortfolioBalanceHistoryStore((s) => s.fetch);
+  const [balanceData, setBalanceData] = useState<BalanceHistoryResponse | null>(null);
 
   useEffect(() => {
     if (!address) return;
+    const cached = getCached(address);
+    if (cached) {
+      setBalanceData(cached);
+      return;
+    }
     let cancelled = false;
-    fetch(
-      `/api/portfolio/balance-history?address=${encodeURIComponent(address)}`,
-    )
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        }
-        return res.json();
-      })
-      .then((json: BalanceHistoryResponse) => {
-        if (!cancelled) setBalanceData(json);
-      })
-      .catch(() => {
-        if (!cancelled) setBalanceData(null);
-      });
+    fetchHistory(address).then((data) => {
+      if (!cancelled && data) setBalanceData(data);
+    });
     return () => {
       cancelled = true;
     };
-  }, [address]);
+  }, [address, getCached, fetchHistory]);
 
   if (!address) return null;
 

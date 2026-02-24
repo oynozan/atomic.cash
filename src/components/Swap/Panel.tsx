@@ -8,24 +8,10 @@ import ConnectWallet from "@/components/Header/Connect";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { usePoolsStore } from "@/store/pools";
+import { useTokenPriceStore } from "@/store/tokenPrice";
 
 type Direction = "bch_to_token" | "token_to_bch";
-
-type ApiPool = {
-    poolAddress: string;
-    poolOwnerPkhHex: string;
-    tokenCategory: string;
-    tokenSymbol?: string;
-    tokenName?: string;
-    tokenIconUrl?: string;
-    bchReserve: number;
-    tokenReserve: number;
-    tokenPriceInBch: number;
-};
-
-type PoolsResponse = {
-    pools: ApiPool[];
-};
 
 type TokenOption = {
     category: string;
@@ -189,9 +175,32 @@ export default function SwapPanel() {
     const [swapType, setSwapType] = useState<"exact_input" | "exact_output">("exact_input");
     const [slippage, setSlippage] = useState<number>(0.5);
 
-    const [tokens, setTokens] = useState<TokenOption[]>([]);
-    const [tokensLoading, setTokensLoading] = useState(false);
-    const [tokensError, setTokensError] = useState<string | null>(null);
+    const { data: poolsData, loading: tokensLoading, error: tokensError, fetch: fetchPools } = usePoolsStore();
+
+    const tokens = useMemo(() => {
+        const pools = poolsData?.pools;
+        if (!pools?.length) return [];
+        const map = new Map<string, TokenOption>();
+        for (const p of pools) {
+            const existing = map.get(p.tokenCategory);
+            if (existing) {
+                existing.poolCount += 1;
+                existing.totalBchLiquidity += p.bchReserve;
+            } else {
+                map.set(p.tokenCategory, {
+                    category: p.tokenCategory,
+                    symbol: p.tokenSymbol,
+                    name: p.tokenName,
+                    iconUrl: p.tokenIconUrl,
+                    poolCount: 1,
+                    totalBchLiquidity: p.bchReserve,
+                });
+            }
+        }
+        return Array.from(map.values()).sort(
+            (a, b) => b.totalBchLiquidity - a.totalBchLiquidity,
+        );
+    }, [poolsData?.pools]);
 
     const [selectedToken, setSelectedToken] = useState<TokenOption | null>(null);
     const [showTokenModal, setShowTokenModal] = useState(false);
@@ -218,70 +227,23 @@ export default function SwapPanel() {
     const quoteAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        let cancelled = false;
-        setTokensLoading(true);
-        setTokensError(null);
+        fetchPools();
+    }, [fetchPools]);
 
-        fetch("/api/pools")
-            .then(res => {
-                if (!res.ok) {
-                    return res
-                        .json()
-                        .then(b => Promise.reject(new Error(b?.error || res.statusText)));
-                }
-                return res.json();
-            })
-            .then((json: PoolsResponse) => {
-                if (cancelled) return;
-                const map = new Map<string, TokenOption>();
-                for (const p of json.pools) {
-                    const existing = map.get(p.tokenCategory);
-                    if (existing) {
-                        existing.poolCount += 1;
-                        existing.totalBchLiquidity += p.bchReserve;
-                    } else {
-                        map.set(p.tokenCategory, {
-                            category: p.tokenCategory,
-                            symbol: p.tokenSymbol,
-                            name: p.tokenName,
-                            iconUrl: p.tokenIconUrl,
-                            poolCount: 1,
-                            totalBchLiquidity: p.bchReserve,
-                        });
-                    }
-                }
-                const list = Array.from(map.values()).sort(
-                    (a, b) => b.totalBchLiquidity - a.totalBchLiquidity,
-                );
-                setTokens(list);
-
-                // If URL has ?token=category or path /swap/[tokenCategory], preselect token
-                const tokenFromPath = pathname?.match(/^\/swap\/([a-fA-F0-9]+)$/)?.[1];
-                const urlToken = searchParams?.get("token") ?? tokenFromPath;
-                if (urlToken) {
-                    const found = list.find(t => t.category === urlToken);
-                    if (found) {
-                        setSelectedToken(found);
-                    } else {
-                        toast.error("No pool found for the requested token.");
-                        setSelectedToken(null);
-                    }
-                }
-            })
-            .catch(err => {
-                if (!cancelled) {
-                    setTokensError(err instanceof Error ? err.message : "Failed to load tokens.");
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setTokensLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Preselect token from URL when pools data is ready
+    useEffect(() => {
+        if (!tokens.length) return;
+        const tokenFromPath = pathname?.match(/^\/swap\/([a-fA-F0-9]+)$/)?.[1];
+        const urlToken = searchParams?.get("token") ?? tokenFromPath;
+        if (!urlToken) return;
+        const found = tokens.find(t => t.category === urlToken);
+        if (found) {
+            setSelectedToken(found);
+        } else {
+            toast.error("No pool found for the requested token.");
+            setSelectedToken(null);
+        }
+    }, [tokens, pathname, searchParams]);
 
     // Load user balances for percentage buttons
     useEffect(() => {
@@ -389,40 +351,21 @@ export default function SwapPanel() {
     const outputTokenLabel =
         direction === "bch_to_token" ? (selectedToken?.symbol ?? "Select token") : "BCH";
 
-    // Load spot price for selected token (1 token = X BCH)
+    // Load spot price for selected token (cached in store, 60s TTL)
+    const fetchPrice = useTokenPriceStore(s => s.fetchPrice);
     useEffect(() => {
         if (!selectedToken) {
             setSpotPrice(null);
             return;
         }
-
         let cancelled = false;
-
-        fetch(`/api/pools/price?tokenCategory=${encodeURIComponent(selectedToken.category)}`)
-            .then(res => {
-                if (!res.ok) {
-                    return res
-                        .json()
-                        .then(b => Promise.reject(new Error(b?.error || res.statusText)));
-                }
-                return res.json();
-            })
-            .then((data: { hasMarketPools?: boolean; marketPrice?: number }) => {
-                if (cancelled) return;
-                if (!data.hasMarketPools || typeof data.marketPrice !== "number") {
-                    setSpotPrice(null);
-                    return;
-                }
-                setSpotPrice(data.marketPrice);
-            })
-            .catch(() => {
-                if (!cancelled) setSpotPrice(null);
-            });
-
+        fetchPrice(selectedToken.category).then(result => {
+            if (!cancelled) setSpotPrice(result?.marketPrice ?? null);
+        });
         return () => {
             cancelled = true;
         };
-    }, [selectedToken]);
+    }, [selectedToken, fetchPrice]);
 
     const handleFlipDirection = () => {
         setDirection(d => (d === "bch_to_token" ? "token_to_bch" : "bch_to_token"));
@@ -535,7 +478,7 @@ export default function SwapPanel() {
         }
     };
 
-    // Auto-quote when user edits either side
+    // Auto-quote when user edits either side (depends only on activeAmount so setting the other side from quote doesn't re-trigger)
     useEffect(() => {
         if (!selectedToken) {
             setQuote(null);
@@ -656,7 +599,9 @@ export default function SwapPanel() {
             quoteAbortRef.current = null;
             if (timeoutId) clearTimeout(timeoutId);
         };
-    }, [direction, swapType, lastEdited, inputAmount, outputAmount, slippage, selectedToken]);
+        // activeAmount (not inputAmount/outputAmount) to avoid duplicate quote when we set the other side from API
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [direction, swapType, lastEdited, activeAmount, slippage, selectedToken]);
 
     return (
         <div id="swap-panel" className="w-full max-w-120">

@@ -1,18 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
-
-type PoolsResponse = {
-  totalBchLiquidity: number;
-};
-
-type VolumeResponse = {
-  volume24hBch: number;
-  prev24hBch: number;
-  volume30dBch: number;
-  prev30dBch: number;
-};
+import { usePoolsStore } from "@/store/pools";
+import { useVolumeStore } from "@/store/volume";
 
 function formatBch(n: number): string {
   if (!Number.isFinite(n)) return "-";
@@ -34,71 +25,21 @@ function formatPercentChange(current: number, previous: number): { label: string
 }
 
 export default function StatsOverview() {
-  const [pools, setPools] = useState<PoolsResponse | null>(null);
-  const [volume, setVolume] = useState<VolumeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: poolsData, loading: poolsLoading, error: poolsError, fetch: fetchPools } = usePoolsStore();
+  const { data: volumeData, loading: volumeLoading, error: volumeError, fetch: fetchVolume } = useVolumeStore();
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+    fetchPools();
+    fetchVolume();
+  }, [fetchPools, fetchVolume]);
 
-    Promise.all([
-      fetch("/api/pools")
-        .then((res) => {
-          if (!res.ok) {
-            return res
-              .json()
-              .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-          }
-          return res.json();
-        })
-        .then((json: PoolsResponse) => json)
-        .catch((err) => {
-          throw new Error(
-            err instanceof Error ? err.message : "Failed to load pools statistics",
-          );
-        }),
-      fetch("/api/stats/volume")
-        .then((res) => {
-          if (!res.ok) {
-            return res
-              .json()
-              .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-          }
-          return res.json();
-        })
-        .then((json: VolumeResponse) => json)
-        .catch((err) => {
-          throw new Error(
-            err instanceof Error ? err.message : "Failed to load volume statistics",
-          );
-        }),
-    ])
-      .then(([poolsJson, volumeJson]) => {
-        if (cancelled) return;
-        setPools(poolsJson);
-        setVolume(volumeJson);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load statistics");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const tvlBch = pools?.totalBchLiquidity ?? 0;
-  const vol24 = volume?.volume24hBch ?? 0;
-  const prev24 = volume?.prev24hBch ?? 0;
-  const vol30 = volume?.volume30dBch ?? 0;
-  const prev30 = volume?.prev30dBch ?? 0;
+  const loading = poolsLoading || volumeLoading;
+  const error = poolsError ?? volumeError ?? null;
+  const tvlBch = poolsData?.totalBchLiquidity ?? 0;
+  const vol24 = volumeData?.volume24hBch ?? 0;
+  const prev24 = volumeData?.prev24hBch ?? 0;
+  const vol30 = volumeData?.volume30dBch ?? 0;
+  const prev30 = volumeData?.prev30dBch ?? 0;
 
   const change24 = formatPercentChange(vol24, prev24);
   const change30 = formatPercentChange(vol30, prev30);

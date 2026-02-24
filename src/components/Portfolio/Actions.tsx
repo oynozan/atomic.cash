@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { decodeCashAddress, encodeCashAddress } from "@bitauth/libauth";
 
 import { useWalletSession } from "@/components/Wrappers/Wallet";
+import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
+import { usePortfolioBalanceHistoryStore } from "@/store/portfolioBalanceHistory";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,17 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import QRCode from "react-qr-code";
 
-type BalancesResponse = {
-  bch: number;
-  bchRaw: string;
-  tokens: {
-    category: string;
-    symbol?: string;
-    name?: string | null;
-    amount: number;
-    iconUrl?: string | null;
-  }[];
-};
+type BalancesResponse = import("@/store/portfolioBalances").PortfolioBalancesResponse;
 
 type PriceResponse = {
   hasMarketPools?: boolean;
@@ -62,8 +54,17 @@ function TokenIcon({ iconUrl, symbol }: { iconUrl?: string | null; symbol: strin
 
 export default function PortfolioActions() {
   const { address, isConnected, session } = useWalletSession();
-  const [balances, setBalances] = useState<BalancesResponse | null>(null);
-  const [loadingBalances, setLoadingBalances] = useState(false);
+  const fetchBalances = usePortfolioBalancesStore((s) => s.fetch);
+  const byAddress = usePortfolioBalancesStore((s) => s.byAddress);
+  const loadingByAddress = usePortfolioBalancesStore((s) => s.loading);
+  const setPortfolioBchInStore = usePortfolioBalancesStore((s) => s.setPortfolioBch);
+  const invalidateBalances = usePortfolioBalancesStore((s) => s.invalidate);
+  const invalidateBalanceHistory = usePortfolioBalanceHistoryStore((s) => s.invalidate);
+
+  const balances = address ? (byAddress[address]?.data ?? null) : null;
+  const loadingBalances = address ? (loadingByAddress[address] ?? false) : false;
+  const cachedPortfolioBch = address ? (byAddress[address]?.portfolioBch ?? null) : null;
+
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [sendAssetType, setSendAssetType] = useState<"bch" | "token">("bch");
@@ -71,49 +72,29 @@ export default function PortfolioActions() {
   const [sendTo, setSendTo] = useState("");
   const [sendAmount, setSendAmount] = useState("");
   const [sending, setSending] = useState(false);
-  const [portfolioBch, setPortfolioBch] = useState<number | null>(null);
+  const [portfolioBch, setPortfolioBch] = useState<number | null>(() => cachedPortfolioBch ?? null);
 
-  // Load balances for total portfolio + send validation
+  // Load balances from store (cached per address, no refetch on tab change)
   useEffect(() => {
-    if (!isConnected || !address) {
-      setBalances(null);
+    if (!isConnected || !address) return;
+    fetchBalances(address);
+  }, [isConnected, address, fetchBalances]);
+
+  // Restore cached portfolio total when switching back to tab (same address + balances)
+  useEffect(() => {
+    if (cachedPortfolioBch != null && balances != null) {
+      setPortfolioBch(cachedPortfolioBch);
+    }
+  }, [cachedPortfolioBch, balances]);
+
+  // Approximate total portfolio value in BCH using AMM pool prices (run once per balances, cache in store)
+  useEffect(() => {
+    if (!balances || !address) {
       setPortfolioBch(null);
       return;
     }
-    let cancelled = false;
-    setLoadingBalances(true);
-    fetch(`/api/portfolio/balances?address=${encodeURIComponent(address)}`)
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        }
-        return res.json();
-      })
-      .then((json: BalancesResponse) => {
-        if (!cancelled) {
-          setBalances(json);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBalances(null);
-          setPortfolioBch(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingBalances(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isConnected, address]);
-
-  // Approximate total portfolio value in BCH using AMM pool prices
-  useEffect(() => {
-    if (!balances) {
-      setPortfolioBch(null);
+    if (cachedPortfolioBch != null) {
+      setPortfolioBch(cachedPortfolioBch);
       return;
     }
     let cancelled = false;
@@ -156,6 +137,7 @@ export default function PortfolioActions() {
 
       if (!cancelled) {
         setPortfolioBch(total);
+        setPortfolioBchInStore(address, total);
       }
     };
 
@@ -164,7 +146,7 @@ export default function PortfolioActions() {
     return () => {
       cancelled = true;
     };
-  }, [balances]);
+  }, [balances, address, cachedPortfolioBch, setPortfolioBchInStore]);
 
   const selectableTokens = useMemo(
     () =>
@@ -275,6 +257,8 @@ export default function PortfolioActions() {
           ? `Send submitted successfully. TxID: ${broadcastData.txid}`
           : "Send submitted successfully.",
       );
+      invalidateBalances(address);
+      invalidateBalanceHistory(address);
       setSendOpen(false);
       setSendAssetType("bch");
       setSelectedTokenCategory(null);

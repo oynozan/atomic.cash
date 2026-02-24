@@ -1,27 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import ConnectWallet from "@/components/Header/Connect";
-
-type TokenBalanceItem = {
-  category: string;
-  symbol?: string;
-  /** Token name from BCMR */
-  name?: string | null;
-  decimals: number;
-  amount: number;
-  amountRaw: string;
-  iconUrl?: string | null;
-};
-
-type BalancesResponse = {
-  bch: number;
-  bchRaw: string;
-  tokens: TokenBalanceItem[];
-};
+import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 
 function formatAmount(value: number, maxDecimals = 6): string {
   if (value === 0) return "0";
@@ -32,37 +16,19 @@ function formatAmount(value: number, maxDecimals = 6): string {
 
 export default function PortfolioTable({ showViewAllLink = true }: { showViewAllLink?: boolean }) {
   const { address, isConnected } = useWalletSession();
-  const [data, setData] = useState<BalancesResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const fetchBalances = usePortfolioBalancesStore((s) => s.fetch);
+  const byAddress = usePortfolioBalancesStore((s) => s.byAddress);
+  const loadingByAddress = usePortfolioBalancesStore((s) => s.loading);
+  const errorByAddress = usePortfolioBalancesStore((s) => s.error);
+
+  const data = address ? (byAddress[address]?.data ?? null) : null;
+  const loading = address ? (loadingByAddress[address] ?? false) : false;
+  const error = address ? (errorByAddress[address] ?? null) : null;
 
   useEffect(() => {
     if (!address?.trim()) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) {
-        setLoading(true);
-        setError(null);
-      }
-    });
-    fetch(`/api/portfolio/balances?address=${encodeURIComponent(address)}`)
-      .then((res) => {
-        if (!res.ok) return res.json().then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        return res.json();
-      })
-      .then((json: BalancesResponse) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load balances");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
+    fetchBalances(address);
+  }, [address, fetchBalances]);
 
   const rows: {
     type: "bch" | "token";

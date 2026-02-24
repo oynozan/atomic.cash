@@ -3,24 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ChevronUp } from "lucide-react";
-
-type PoolSummary = {
-  poolAddress: string;
-  poolOwnerPkhHex: string;
-  tokenCategory: string;
-  tokenSymbol?: string;
-  tokenIconUrl?: string;
-  bchReserve: number;
-  tokenReserve: number;
-  tokenPriceInBch: number;
-};
-
-type PoolsResponse = {
-  totalPools: number;
-  totalBchLiquidity: number;
-  tokenCounts: Record<string, number>;
-  pools: PoolSummary[];
-};
+import { usePoolsStore, type ApiPool, type PoolsResponse } from "@/store/pools";
 
 function formatNumber(n: number, maxDecimals = 4): string {
   if (!Number.isFinite(n)) return "-";
@@ -32,35 +15,12 @@ function formatNumber(n: number, maxDecimals = 4): string {
 }
 
 export default function PoolsTable() {
-  const [data, setData] = useState<PoolsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, fetch: fetchPools } = usePoolsStore();
   const [expandedToken, setExpandedToken] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/pools")
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .then((b) => Promise.reject(new Error(b?.error || res.statusText)));
-        }
-        return res.json();
-      })
-      .then((json: PoolsResponse) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load pools");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    fetchPools();
+  }, [fetchPools]);
 
   if (loading) {
     return (
@@ -96,7 +56,7 @@ export default function PoolsTable() {
         tokenIconUrl?: string;
         totalBch: number;
         totalToken: number;
-        pools: PoolSummary[];
+        pools: ApiPool[];
       }
     >();
 
