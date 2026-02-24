@@ -38,7 +38,7 @@ export function templateToWcTransactionObject(
   // If there is any pool input, initialise the contract and placeholders once.
   const hasPoolInput = template.inputs.some((i) => i.type === "pool");
   const poolContract: Contract | null = hasPoolInput
-    ? getExchangeContract(hexToBin(template.poolOwnerPkhHex), hexToBin(template.versionHex))
+    ? getExchangeContract(hexToBin(template.poolOwnerPkhHex))
     : null;
   const placeholderPk = hasPoolInput ? placeholderPublicKey() : undefined;
   const placeholderSig = hasPoolInput ? placeholderSignature() : undefined;

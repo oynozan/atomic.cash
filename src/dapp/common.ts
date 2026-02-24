@@ -26,7 +26,6 @@ import {
     BCMR_API_URL,
     BCH_DECIMALS,
     DEFAULT_TOKEN_DECIMALS,
-    CONTRACT_VERSION,
     ELECTRUM_ENDPOINTS,
 } from './config';
 
@@ -51,9 +50,6 @@ export const provider: NetworkProvider = createElectrumProvider();
 const contractPath = join(dirname(fileURLToPath(import.meta.url)), 'contracts', 'atomic.cash');
 
 export const artifact = compileFile(contractPath);
-
-// Contract version (4 byte)
-export const contractVersion = hexToBin(CONTRACT_VERSION);
 
 const tokenDecimalCache = new Map<string, number>();
 const tokenMetadataCache = new Map<string, TokenMetadata>();
@@ -209,21 +205,18 @@ export function filterTokenUtxos(utxos: Utxo[], tokenCategory: string): Utxo[] {
 /**
  * Create exchange contract
  * @param poolOwnerPkh - Pool owner public key hash (20 byte)
- * @param version - Contract version (4 byte, optional - default CONTRACT_VERSION)
  */
-export function getExchangeContract(poolOwnerPkh: Uint8Array, version?: Uint8Array): Contract {
-    const ver = version ?? contractVersion;
-    return new Contract(artifact, [poolOwnerPkh, ver], { provider });
+export function getExchangeContract(poolOwnerPkh: Uint8Array): Contract {
+    return new Contract(artifact, [poolOwnerPkh], { provider });
 }
 
 /**
  * Create contract from public key
  * @param publicKey - Public key (33 byte compressed)
- * @param version - Contract version (4 byte, optional)
  */
-export function getExchangeContractFromPublicKey(publicKey: Uint8Array, version?: Uint8Array): Contract {
+export function getExchangeContractFromPublicKey(publicKey: Uint8Array): Contract {
     const pkh = hash160(publicKey);
-    return getExchangeContract(pkh, version);
+    return getExchangeContract(pkh);
 }
 
 /**
@@ -267,14 +260,9 @@ export async function signAndBroadcast(
     template: UnsignedTxTemplate,
     signerPrivateKey: Uint8Array
 ): Promise<string> {
-    const { inputs, outputs, poolOwnerPkhHex, versionHex } = template;
-    
-    // Pool owner PKH and version
+    const { inputs, outputs, poolOwnerPkhHex } = template;
     const poolOwnerPkh = hexToBin(poolOwnerPkhHex);
-    const version = hexToBin(versionHex);
-    
-    // Create contract
-    const contract = getExchangeContract(poolOwnerPkh, version);
+    const contract = getExchangeContract(poolOwnerPkh);
     
     // Create signature template
     const sigTemplate = createSignatureTemplate(signerPrivateKey);

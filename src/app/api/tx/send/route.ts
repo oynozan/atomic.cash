@@ -8,7 +8,7 @@ import {
   tokenToOnChain,
   toTokenAddress,
 } from "@/dapp/common";
-import { DUST_LIMIT, DEFAULT_MINER_FEE, CONTRACT_VERSION } from "@/dapp/config";
+import { DUST_LIMIT, DEFAULT_MINER_FEE } from "@/dapp/config";
 import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "@/dapp/types";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
 
@@ -195,7 +195,6 @@ export async function POST(request: NextRequest) {
         // Plain user P2PKH send; no pool involved
         poolAddress: "",
         poolOwnerPkhHex: "".padStart(40, "0"),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: fromTokenAddress,
       };
@@ -278,7 +277,6 @@ export async function POST(request: NextRequest) {
       outputs,
       poolAddress: "",
       poolOwnerPkhHex: "".padStart(40, "0"),
-      versionHex: CONTRACT_VERSION,
       minerFee: feeSats,
       ownerAddress: from,
     };

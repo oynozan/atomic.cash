@@ -35,7 +35,7 @@ import type {
     SwapResult,
 } from './types';
 
-import { DEFAULT_MINER_FEE, DEFAULT_SLIPPAGE_TOLERANCE, CONTRACT_VERSION } from '../config';
+import { DEFAULT_MINER_FEE, DEFAULT_SLIPPAGE_TOLERANCE } from '../config';
 
 async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
     const contract = getExchangeContract(poolOwnerPkh);
@@ -189,7 +189,6 @@ export async function swapExactBchForTokens(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(poolOwnerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: userAddress,
     };
@@ -338,7 +337,6 @@ export async function swapBchForExactTokens(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(poolOwnerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: userAddress,
     };
@@ -508,7 +506,6 @@ export async function swapExactTokensForBch(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(poolOwnerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: userAddress,
     };
@@ -677,7 +674,6 @@ export async function swapTokensForExactBch(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(poolOwnerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: userAddress,
     };

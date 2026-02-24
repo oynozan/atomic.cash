@@ -1,7 +1,6 @@
 import { Network } from './types';
 
 const networkEnv = process.env.NEXT_PUBLIC_NETWORK?.toLowerCase() || 'chipnet';
-export const CONTRACT_VERSION = process.env.NEXT_PUBLIC_CONTRACT_VERSION || '00000001';
 
 export const NETWORK: Network = 
     networkEnv === 'mainnet' ? Network.MAINNET : Network.CHIPNET;

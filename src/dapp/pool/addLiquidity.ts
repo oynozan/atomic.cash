@@ -18,7 +18,7 @@ import {
     toTokenAddress,
 } from '../common';
 
-import { DEFAULT_MINER_FEE, CONTRACT_VERSION } from '../config';
+import { DEFAULT_MINER_FEE } from '../config';
 import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
 import type { AddLiquidityParams, AddLiquidityOptions, AddLiquidityResult } from './types';
 import { addressToPkh } from '../queries/user';
@@ -188,7 +188,6 @@ export async function addLiquidity(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(ownerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: ownerTokenAddressTokenAware,
     };

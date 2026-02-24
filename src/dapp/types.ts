@@ -89,8 +89,6 @@ export interface UnsignedTxTemplate {
     poolAddress: string;
     /** Pool owner PKH (hex) */
     poolOwnerPkhHex: string;
-    /** Contract version (hex) */
-    versionHex: string;
     /** Miner fee */
     minerFee: bigint;
     /** Operation type (for automatic registry) */

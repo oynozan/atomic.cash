@@ -19,7 +19,7 @@ import {
     toTokenAddress,
 } from '../common';
 
-import { DEFAULT_MINER_FEE, CONTRACT_VERSION } from '../config';
+import { DEFAULT_MINER_FEE } from '../config';
 import { OperationType } from '../types';
 import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
 import type { CreatePoolParams, CreatePoolOptions, CreatePoolResult } from './types';
@@ -247,7 +247,6 @@ export async function createPool(
         outputs,
         poolAddress: contractAddress,
         poolOwnerPkhHex: bytesToHex(ownerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         operationType: OperationType.CREATE_POOL,
         ownerAddress: ownerTokenAddressTokenAware,

@@ -17,7 +17,7 @@ import {
     toTokenAddress,
 } from '../common';
 
-import { DEFAULT_MINER_FEE, DUST_LIMIT, CONTRACT_VERSION } from '../config';
+import { DEFAULT_MINER_FEE, DUST_LIMIT } from '../config';
 import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
 import type { RemoveLiquidityParams, RemoveLiquidityOptions, RemoveLiquidityResult } from './types';
 import { addressToPkh } from '../queries/user';
@@ -201,7 +201,6 @@ export async function removeLiquidity(
         outputs,
         poolAddress: contractTokenAddress,
         poolOwnerPkhHex: bytesToHex(ownerPkh),
-        versionHex: CONTRACT_VERSION,
         minerFee,
         ownerAddress: ownerTokenAddressTokenAware,
     };
