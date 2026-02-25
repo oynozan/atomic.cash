@@ -9,17 +9,17 @@ import {
     ensureTokenDecimals,
     getInputPrice,
     getOutputPrice,
-} from '../common';
-import type { SwapEstimate } from './types';
+} from "../common";
+import type { SwapEstimate } from "./types";
 
 /**
  * BCH → Token swap estimation
- * 
+ *
  * @param poolOwnerPkh - Pool owner PKH
  * @param tokenCategory - Token category
  * @param bchAmount - Amount to send (human readable)
  * @returns Swap estimation
- * 
+ *
  * @example
  * ```ts
  * const estimate = await estimateBchToToken(pkh, category, 0.01);
@@ -29,18 +29,18 @@ export async function estimateBchToToken(
     poolOwnerPkh: Uint8Array,
     tokenCategory: string,
     bchAmount: number,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<SwapEstimate> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
-    
+
     const contract = getExchangeContract(poolOwnerPkh);
     const utxos = await contract.getUtxos();
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
-    
+
     if (!poolUtxo || !poolUtxo.token) {
         return {
             valid: false,
-            error: 'Pool not found! Create a pool first with createPool.',
+            error: "Pool not found! Create a pool first with createPool.",
             inputAmount: bchAmount,
             outputAmount: 0,
             effectivePrice: 0,
@@ -49,22 +49,22 @@ export async function estimateBchToToken(
             fee: 0,
         };
     }
-    
+
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
-    
+
     const inputRaw = bchToSatoshi(bchAmount);
     const outputRaw = getInputPrice(inputRaw, poolBch, poolTokens);
     const outputAmount = tokenFromOnChain(outputRaw, tokenCategory);
-    
+
     const effectivePrice = bchAmount / outputAmount; // BCH per token (human)
-    
+
     // Calculate price impact
     const spotPriceHuman = satoshiToBch(poolBch) / tokenFromOnChain(poolTokens, tokenCategory);
     const priceImpact = ((effectivePrice - spotPriceHuman) / spotPriceHuman) * 100;
-    
+
     const fee = bchAmount * 0.003;
-    
+
     return {
         valid: true,
         inputAmount: bchAmount,
@@ -78,7 +78,7 @@ export async function estimateBchToToken(
 
 /**
  * Token → BCH swap estimation
- * 
+ *
  * @param poolOwnerPkh - Pool owner PKH
  * @param tokenCategory - Token category
  * @param tokenAmount - Amount to send (human readable)
@@ -88,18 +88,18 @@ export async function estimateTokenToBch(
     poolOwnerPkh: Uint8Array,
     tokenCategory: string,
     tokenAmount: number,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<SwapEstimate> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
-    
+
     const contract = getExchangeContract(poolOwnerPkh);
     const utxos = await contract.getUtxos();
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
-    
+
     if (!poolUtxo || !poolUtxo.token) {
         return {
             valid: false,
-            error: 'Pool not found! Create a pool first with createPool.',
+            error: "Pool not found! Create a pool first with createPool.",
             inputAmount: tokenAmount,
             outputAmount: 0,
             effectivePrice: 0,
@@ -108,21 +108,21 @@ export async function estimateTokenToBch(
             fee: 0,
         };
     }
-    
+
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
-    
+
     const inputRaw = tokenToOnChain(tokenAmount, tokenCategory);
     const outputRaw = getInputPrice(inputRaw, poolTokens, poolBch);
     const outputAmount = satoshiToBch(outputRaw);
-    
+
     const spotPriceHuman = satoshiToBch(poolBch) / tokenFromOnChain(poolTokens, tokenCategory);
     const effectivePrice = outputAmount / tokenAmount; // BCH per token
-    
+
     const priceImpact = ((spotPriceHuman - effectivePrice) / spotPriceHuman) * 100;
-    
+
     const fee = tokenAmount * 0.003;
-    
+
     return {
         valid: true,
         inputAmount: tokenAmount,
@@ -141,18 +141,18 @@ export async function estimateBchForExactTokens(
     poolOwnerPkh: Uint8Array,
     tokenCategory: string,
     tokenAmount: number,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<SwapEstimate> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
-    
+
     const contract = getExchangeContract(poolOwnerPkh);
     const utxos = await contract.getUtxos();
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
-    
+
     if (!poolUtxo || !poolUtxo.token) {
         return {
             valid: false,
-            error: 'Pool not found! Create a pool first with createPool.',
+            error: "Pool not found! Create a pool first with createPool.",
             inputAmount: 0,
             outputAmount: tokenAmount,
             effectivePrice: 0,
@@ -161,17 +161,17 @@ export async function estimateBchForExactTokens(
             fee: 0,
         };
     }
-    
+
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
-    
+
     const outputRaw = tokenToOnChain(tokenAmount, tokenCategory);
-    
+
     // Does the pool have enough tokens?
     if (outputRaw >= poolTokens) {
         return {
             valid: false,
-            error: 'Pool does not have enough tokens!',
+            error: "Pool does not have enough tokens!",
             inputAmount: 0,
             outputAmount: tokenAmount,
             effectivePrice: 0,
@@ -180,17 +180,17 @@ export async function estimateBchForExactTokens(
             fee: 0,
         };
     }
-    
+
     const inputRaw = getOutputPrice(outputRaw, poolBch, poolTokens);
     const inputAmount = satoshiToBch(inputRaw);
-    
+
     const spotPriceHuman = satoshiToBch(poolBch) / tokenFromOnChain(poolTokens, tokenCategory);
     const effectivePrice = inputAmount / tokenAmount;
-    
+
     const priceImpact = ((effectivePrice - spotPriceHuman) / spotPriceHuman) * 100;
-    
+
     const fee = inputAmount * 0.003;
-    
+
     return {
         valid: true,
         inputAmount,
@@ -209,18 +209,18 @@ export async function estimateTokensForExactBch(
     poolOwnerPkh: Uint8Array,
     tokenCategory: string,
     bchAmount: number,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<SwapEstimate> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
-    
+
     const contract = getExchangeContract(poolOwnerPkh);
     const utxos = await contract.getUtxos();
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
-    
+
     if (!poolUtxo || !poolUtxo.token) {
         return {
             valid: false,
-            error: 'Pool not found! Create a pool first with createPool.',
+            error: "Pool not found! Create a pool first with createPool.",
             inputAmount: 0,
             outputAmount: bchAmount,
             effectivePrice: 0,
@@ -229,17 +229,17 @@ export async function estimateTokensForExactBch(
             fee: 0,
         };
     }
-    
+
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
-    
+
     const outputRaw = bchToSatoshi(bchAmount);
-    
+
     // Does the pool have enough BCH?
     if (outputRaw >= poolBch) {
         return {
             valid: false,
-            error: 'Pool does not have enough BCH!',
+            error: "Pool does not have enough BCH!",
             inputAmount: 0,
             outputAmount: bchAmount,
             effectivePrice: 0,
@@ -248,17 +248,17 @@ export async function estimateTokensForExactBch(
             fee: 0,
         };
     }
-    
+
     const inputRaw = getOutputPrice(outputRaw, poolTokens, poolBch);
     const inputAmount = tokenFromOnChain(inputRaw, tokenCategory);
-    
+
     const spotPriceHuman = satoshiToBch(poolBch) / tokenFromOnChain(poolTokens, tokenCategory);
     const effectivePrice = bchAmount / inputAmount;
-    
+
     const priceImpact = ((spotPriceHuman - effectivePrice) / spotPriceHuman) * 100;
-    
+
     const fee = inputAmount * 0.003;
-    
+
     return {
         valid: true,
         inputAmount,

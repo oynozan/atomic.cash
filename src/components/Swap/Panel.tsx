@@ -8,9 +8,9 @@ import ConnectWallet from "@/components/Header/Connect";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { usePoolsStore } from "@/store/pools";
 import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
+import { useTokensOverviewStore } from "@/store/tokensOverview";
 
 type Direction = "bch_to_token" | "token_to_bch";
 
@@ -19,8 +19,8 @@ type TokenOption = {
     symbol?: string;
     name?: string;
     iconUrl?: string;
-    poolCount: number;
-    totalBchLiquidity: number;
+    poolCount?: number;
+    totalBchLiquidity?: number;
     balance?: number;
 };
 
@@ -176,32 +176,26 @@ export default function SwapPanel() {
     const [swapType, setSwapType] = useState<"exact_input" | "exact_output">("exact_input");
     const [slippage, setSlippage] = useState<number>(0.5);
 
-    const { data: poolsData, loading: tokensLoading, error: tokensError, fetch: fetchPools } = usePoolsStore();
+    const {
+        data: overviewData,
+        loading: tokensLoading,
+        error: tokensError,
+        fetch: fetchTokensOverview,
+    } = useTokensOverviewStore();
 
     const tokens = useMemo(() => {
-        const pools = poolsData?.pools;
-        if (!pools?.length) return [];
-        const map = new Map<string, TokenOption>();
-        for (const p of pools) {
-            const existing = map.get(p.tokenCategory);
-            if (existing) {
-                existing.poolCount += 1;
-                existing.totalBchLiquidity += p.bchReserve;
-            } else {
-                map.set(p.tokenCategory, {
-                    category: p.tokenCategory,
-                    symbol: p.tokenSymbol,
-                    name: p.tokenName,
-                    iconUrl: p.tokenIconUrl,
-                    poolCount: 1,
-                    totalBchLiquidity: p.bchReserve,
-                });
-            }
-        }
-        return Array.from(map.values()).sort(
-            (a, b) => b.totalBchLiquidity - a.totalBchLiquidity,
-        );
-    }, [poolsData?.pools]);
+        const items = overviewData?.tokens;
+        if (!items?.length) return [];
+        return items
+            .map<TokenOption>(t => ({
+                category: t.tokenCategory,
+                symbol: t.symbol,
+                name: t.name,
+                iconUrl: t.iconUrl,
+                totalBchLiquidity: t.tvlBch,
+            }))
+            .sort((a, b) => (b.totalBchLiquidity ?? 0) - (a.totalBchLiquidity ?? 0));
+    }, [overviewData?.tokens]);
 
     const [selectedToken, setSelectedToken] = useState<TokenOption | null>(null);
     const [showTokenModal, setShowTokenModal] = useState(false);
@@ -215,15 +209,14 @@ export default function SwapPanel() {
     const [isQuoting, setIsQuoting] = useState(false);
 
     const portfolioBalances = usePortfolioBalancesStore(s =>
-        address ? s.byAddress[address]?.data ?? null : null,
+        address ? (s.byAddress[address]?.data ?? null) : null,
     );
     const fetchPortfolioBalances = usePortfolioBalancesStore(s => s.fetch);
 
     const bchBalance = portfolioBalances?.bch ?? null;
     const tokenBalances = useMemo(
         () =>
-            portfolioBalances?.tokens?.map(t => ({ category: t.category, amount: t.amount })) ??
-            [],
+            portfolioBalances?.tokens?.map(t => ({ category: t.category, amount: t.amount })) ?? [],
         [portfolioBalances?.tokens],
     );
     const tokensWithBalance = useMemo(
@@ -238,8 +231,8 @@ export default function SwapPanel() {
     const quoteAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        fetchPools();
-    }, [fetchPools]);
+        fetchTokensOverview();
+    }, [fetchTokensOverview]);
 
     // Preselect token from URL when pools data is ready
     useEffect(() => {
@@ -402,9 +395,9 @@ export default function SwapPanel() {
             }
 
             const broadcastRes = await fetch("/api/tx/broadcast", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
             });
             const broadcastData = await broadcastRes.json();
             if (!broadcastRes.ok) {

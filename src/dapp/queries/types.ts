@@ -1,4 +1,4 @@
-import type { SwapDirection, SwapType } from '../types';
+import type { SwapDirection, SwapType } from "../types";
 
 /**
  * User balance information
@@ -103,27 +103,27 @@ export interface PoolInfo {
     tokenSymbol?: string;
     /** Token decimal */
     tokenDecimals: number;
-    
+
     /** Pool owner PKH (hex) */
     poolOwnerPkhHex: string;
     /** Pool contract address */
     poolAddress: string;
-    
+
     // Reserves (human readable)
     bchReserve: number;
     tokenReserve: number;
-    
+
     // Reserves (raw)
     bchReserveRaw: bigint;
     tokenReserveRaw: bigint;
-    
+
     // Prices
     tokenPriceInBch: number;
     bchPriceInToken: number;
-    
+
     // AMM values
     kValue: bigint;
-    
+
     // UTXO information
     utxoTxid: string;
     utxoVout: number;
@@ -141,21 +141,21 @@ export interface PoolInfoResult {
 }
 
 /**
-* Price information
+ * Price information
  */
 export interface PriceInfo {
     /** Spot price (1 token = x BCH) */
     tokenPriceInBch: number;
-    
+
     /** Spot price (1 BCH = x token) */
     bchPriceInToken: number;
-    
+
     /** 24h change (if available) */
     change24h?: number;
-    
+
     /** Pool liquidity (BCH) */
     liquidityBch: number;
-    
+
     /** Pool liquidity (Token) */
     liquidityToken: number;
 }
@@ -166,16 +166,16 @@ export interface PriceInfo {
 export interface QuoteParams {
     tokenCategory: string;
     tokenDecimals?: number;
-    
+
     /** Swap direction */
     direction: SwapDirection;
-    
+
     /** Swap type */
     swapType: SwapType;
-    
+
     /** Amount (exact_input: input, exact_output: output) */
     amount: number;
-    
+
     /** Slippage tolerance (%) */
     slippageTolerance?: number;
 }
@@ -187,23 +187,23 @@ export interface PriceQuote {
     // Input
     inputAmount: number;
     inputAmountRaw: bigint;
-    inputType: 'bch' | 'token';
-    
+    inputType: "bch" | "token";
+
     // Output
     outputAmount: number;
     outputAmountRaw: bigint;
-    outputType: 'bch' | 'token';
-    
+    outputType: "bch" | "token";
+
     // Price impact
     priceImpact: number;
-    
+
     // Fees
     feeAmount: number;
     feeAmountRaw: bigint;
-    
+
     // Effective price
     effectivePrice: number;
-    
+
     // Minimum/maximum (based on slippage)
     minimumReceived?: number;
     maximumSent?: number;
@@ -237,9 +237,9 @@ export interface TxHistoryItem {
     blockHeight: number;
     explorerUrl: string;
     /** Direction of BCH value flow relative to the address */
-    direction?: 'sent' | 'received' | 'self';
+    direction?: "sent" | "received" | "self";
     /** Asset symbol (currently only BCH for chain history) */
-    asset?: 'BCH';
+    asset?: "BCH";
     /** Net amount (absolute) in BCH */
     amount?: number;
 }

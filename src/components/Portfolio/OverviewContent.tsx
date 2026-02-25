@@ -5,41 +5,54 @@ import { useWalletSession } from "@/components/Wrappers/Wallet";
 import PortfolioBalanceChart from "@/components/Portfolio/BalanceChart";
 import SwapThisWeekCard from "@/components/Portfolio/SwapThisWeekCard";
 import {
-  usePortfolioBalanceHistoryStore,
-  type BalanceHistoryResponse,
+    usePortfolioBalanceHistoryStore,
+    type BalanceHistoryResponse,
 } from "@/store/portfolioBalanceHistory";
 
 export default function PortfolioOverviewContent() {
-  const { address } = useWalletSession();
-  const getCached = usePortfolioBalanceHistoryStore((s) => s.getCached);
-  const fetchHistory = usePortfolioBalanceHistoryStore((s) => s.fetch);
-  const [balanceData, setBalanceData] = useState<BalanceHistoryResponse | null>(null);
-
-  useEffect(() => {
-    if (!address) return;
-    const cached = getCached(address);
-    if (cached) {
-      setBalanceData(cached);
-      return;
-    }
-    let cancelled = false;
-    fetchHistory(address).then((data) => {
-      if (!cancelled && data) setBalanceData(data);
+    const { address } = useWalletSession();
+    const fetchHistory = usePortfolioBalanceHistoryStore(s => s.fetch);
+    const [balanceData, setBalanceData] = useState<BalanceHistoryResponse | null>(() => {
+        if (!address) return null;
+        // Synchronously hydrate from store cache (if present) so we avoid
+        // layout shifts when navigating between portfolio tabs.
+        return usePortfolioBalanceHistoryStore.getState().getCached(address) ?? null;
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [address, getCached, fetchHistory]);
 
-  if (!address) return null;
+    useEffect(() => {
+        if (!address) return;
 
-  return (
-    <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-6">
-      <SwapThisWeekCard
-        swapsThisWeek={balanceData?.swapsThisWeek ?? 0}
-        swappedThisWeekBch={balanceData?.swappedThisWeekBch ?? 0}
-      />
-      <PortfolioBalanceChart address={address} initialData={balanceData} />
-    </div>
-  );
+        let cancelled = false;
+
+        const run = async () => {
+            // Try cache first
+            const cached = usePortfolioBalanceHistoryStore.getState().getCached(address);
+            if (cached) {
+                if (!cancelled) setBalanceData(cached);
+                return;
+            }
+            const data = await fetchHistory(address);
+            if (!cancelled && data) {
+                setBalanceData(data);
+            }
+        };
+
+        void run();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [address, fetchHistory]);
+
+    if (!address) return null;
+
+    return (
+        <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-6">
+            <SwapThisWeekCard
+                swapsThisWeek={balanceData?.swapsThisWeek ?? 0}
+                swappedThisWeekBch={balanceData?.swappedThisWeekBch ?? 0}
+            />
+            <PortfolioBalanceChart address={address} initialData={balanceData} />
+        </div>
+    );
 }

@@ -1,4 +1,3 @@
-
 import {
     getExchangeContract,
     satoshiToBch,
@@ -9,10 +8,10 @@ import {
     getInputPrice,
     getOutputPrice,
     calculatePriceImpact,
-} from '../common';
+} from "../common";
 
-import { SwapDirection, SwapType } from '../types';
-import type { PriceQuote, PriceInfo, GetPriceParams, GetQuoteParams } from './types';
+import { SwapDirection, SwapType } from "../types";
+import type { PriceQuote, PriceInfo, GetPriceParams, GetQuoteParams } from "./types";
 
 async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
     const contract = getExchangeContract(poolOwnerPkh);
@@ -21,7 +20,7 @@ async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
 }
 /**
  * Get current price
- * 
+ *
  * @example
  * ```ts
  * const price = await getPrice({
@@ -51,7 +50,7 @@ export async function getPrice(params: GetPriceParams): Promise<PriceInfo | null
 
     // 1 Token = x BCH
     const tokenPriceInBch = liquidityBch / liquidityToken;
-    
+
     // 1 BCH = x Token
     const bchPriceInToken = liquidityToken / liquidityBch;
 
@@ -65,7 +64,7 @@ export async function getPrice(params: GetPriceParams): Promise<PriceInfo | null
 
 /**
  * Get quote for a swap
- * 
+ *
  * @example
  * ```ts
  * const quote = await getQuote({
@@ -78,12 +77,12 @@ export async function getPrice(params: GetPriceParams): Promise<PriceInfo | null
  * ```
  */
 export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | null> {
-    const { 
+    const {
         poolOwnerPkh,
-        tokenCategory, 
+        tokenCategory,
         tokenDecimals,
-        direction, 
-        swapType, 
+        direction,
+        swapType,
         amount,
         slippageTolerance = 0.5,
     } = params;
@@ -101,13 +100,13 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
 
     let inputAmountRaw: bigint;
     let outputAmountRaw: bigint;
-    let inputType: 'bch' | 'token';
-    let outputType: 'bch' | 'token';
+    let inputType: "bch" | "token";
+    let outputType: "bch" | "token";
 
     // Calculate based on direction and type
     if (direction === SwapDirection.BCH_TO_TOKEN) {
-        inputType = 'bch';
-        outputType = 'token';
+        inputType = "bch";
+        outputType = "token";
 
         if (swapType === SwapType.EXACT_INPUT) {
             inputAmountRaw = bchToSatoshi(amount);
@@ -117,8 +116,8 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
             inputAmountRaw = getOutputPrice(outputAmountRaw, poolBch, poolTokens);
         }
     } else {
-        inputType = 'token';
-        outputType = 'bch';
+        inputType = "token";
+        outputType = "bch";
 
         if (swapType === SwapType.EXACT_INPUT) {
             inputAmountRaw = tokenToOnChain(amount, tokenCategory);
@@ -130,13 +129,15 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
     }
 
     // Readable values
-    const inputAmount = inputType === 'bch' 
-        ? satoshiToBch(inputAmountRaw)
-        : tokenFromOnChain(inputAmountRaw, tokenCategory);
-        
-    const outputAmount = outputType === 'bch'
-        ? satoshiToBch(outputAmountRaw)
-        : tokenFromOnChain(outputAmountRaw, tokenCategory);
+    const inputAmount =
+        inputType === "bch"
+            ? satoshiToBch(inputAmountRaw)
+            : tokenFromOnChain(inputAmountRaw, tokenCategory);
+
+    const outputAmount =
+        outputType === "bch"
+            ? satoshiToBch(outputAmountRaw)
+            : tokenFromOnChain(outputAmountRaw, tokenCategory);
 
     // Price impact
     const inputReserve = direction === SwapDirection.BCH_TO_TOKEN ? poolBch : poolTokens;
@@ -144,9 +145,10 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
 
     // Fee (0.3%)
     const feeAmountRaw = (inputAmountRaw * 3n) / 1000n;
-    const feeAmount = inputType === 'bch'
-        ? satoshiToBch(feeAmountRaw)
-        : tokenFromOnChain(feeAmountRaw, tokenCategory);
+    const feeAmount =
+        inputType === "bch"
+            ? satoshiToBch(feeAmountRaw)
+            : tokenFromOnChain(feeAmountRaw, tokenCategory);
 
     // Effective price
     const effectivePrice = inputAmount / outputAmount;
@@ -154,15 +156,17 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
     // Slippage
     const slippageMultiplier = BigInt(Math.floor((100 - slippageTolerance) * 10));
     const minimumReceivedRaw = (outputAmountRaw * slippageMultiplier) / 1000n;
-    const minimumReceived = outputType === 'bch'
-        ? satoshiToBch(minimumReceivedRaw)
-        : tokenFromOnChain(minimumReceivedRaw, tokenCategory);
+    const minimumReceived =
+        outputType === "bch"
+            ? satoshiToBch(minimumReceivedRaw)
+            : tokenFromOnChain(minimumReceivedRaw, tokenCategory);
 
     const maxSlippageMultiplier = BigInt(Math.floor((100 + slippageTolerance) * 10));
     const maximumSentRaw = (inputAmountRaw * maxSlippageMultiplier) / 1000n;
-    const maximumSent = inputType === 'bch'
-        ? satoshiToBch(maximumSentRaw)
-        : tokenFromOnChain(maximumSentRaw, tokenCategory);
+    const maximumSent =
+        inputType === "bch"
+            ? satoshiToBch(maximumSentRaw)
+            : tokenFromOnChain(maximumSentRaw, tokenCategory);
 
     return {
         inputAmount,
@@ -188,7 +192,7 @@ export async function getQuotes(
     tokenCategory: string,
     direction: SwapDirection,
     amounts: number[],
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<(PriceQuote | null)[]> {
     const quotes: (PriceQuote | null)[] = [];
 

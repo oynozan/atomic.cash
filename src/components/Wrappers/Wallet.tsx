@@ -195,7 +195,9 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
 
     useEffect(() => {
         if (!projectId) {
-            setInitError("WalletConnect project ID is not configured (NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID).");
+            setInitError(
+                "WalletConnect project ID is not configured (NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID).",
+            );
             return;
         }
         (async () => {
@@ -206,7 +208,9 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
 
             const m = createAppKit({
                 projectId,
-                networks: [activeBchNetwork as Parameters<typeof createAppKit>[0]["networks"][number]],
+                networks: [
+                    activeBchNetwork as Parameters<typeof createAppKit>[0]["networks"][number],
+                ],
                 universalProvider: p,
                 manualWCControl: true,
                 // Sadece WalletConnect QR kodu, altta wallet arama/listesi yok

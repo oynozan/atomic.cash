@@ -13,16 +13,13 @@ import {
 } from "../ui/dropdown-menu";
 import { useWalletSession } from "../Wrappers/Wallet";
 import { formatAddress, formatError } from "@/lib/utils";
-
-type BalancesResponse = {
-    bch: number;
-    bchRaw: string;
-};
+import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 
 export default function ConnectWallet({ className }: { className?: string }) {
     const session = useWalletSession();
     const router = useRouter();
     const [bchBalance, setBchBalance] = useState<number | null>(null);
+    const fetchBalances = usePortfolioBalancesStore(s => s.fetch);
 
     const handleDisconnect = async () => {
         try {
@@ -35,7 +32,9 @@ export default function ConnectWallet({ className }: { className?: string }) {
 
     const handleConnect = async () => {
         if (!session.provider || !session.modal) {
-            return toast.error(session?.initError || "An error occurred while connecting the wallet.");
+            return toast.error(
+                session?.initError || "An error occurred while connecting the wallet.",
+            );
         }
         try {
             await session.connectWallet();
@@ -48,29 +47,32 @@ export default function ConnectWallet({ className }: { className?: string }) {
     const isConnected = session.isConnected && Boolean(session.address);
 
     useEffect(() => {
-        if (!isConnected || !session.address) {
-            setBchBalance(null);
-            return;
-        }
         let cancelled = false;
-        fetch(`/api/portfolio/balances?address=${encodeURIComponent(session.address)}`)
-            .then((res) => {
-                if (!res.ok) {
-                    return res.json().then((b) => Promise.reject(new Error(b?.error || res.statusText)));
+
+        const run = async () => {
+            if (!isConnected || !session.address) {
+                if (!cancelled) {
+                    setBchBalance(null);
                 }
-                return res.json();
-            })
-            .then((json: BalancesResponse) => {
-                if (cancelled) return;
-                setBchBalance(json.bch);
-            })
-            .catch(() => {
-                if (!cancelled) setBchBalance(null);
-            });
+                return;
+            }
+
+            const store = usePortfolioBalancesStore.getState();
+            const cached = store.getCached(session.address!);
+            if (cached && !cancelled) {
+                setBchBalance(cached.bch);
+            }
+            const data = await fetchBalances(session.address!);
+            if (!cancelled && data) {
+                setBchBalance(data.bch);
+            }
+        };
+
+        void run();
         return () => {
             cancelled = true;
         };
-    }, [isConnected, session.address]);
+    }, [isConnected, session.address, fetchBalances]);
 
     const formattedAddress = session.address ? formatAddress(session.address) : "";
     const balanceLabel =
@@ -79,8 +81,8 @@ export default function ConnectWallet({ className }: { className?: string }) {
     const label = isConnected
         ? [formattedAddress, balanceLabel].filter(Boolean).join(" · ")
         : session.isConnecting
-            ? "Connecting..."
-            : "Connect Wallet";
+          ? "Connecting..."
+          : "Connect Wallet";
 
     const disabled = session.isConnecting;
 
@@ -94,7 +96,7 @@ export default function ConnectWallet({ className }: { className?: string }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="bottom" align="end" className="min-w-40">
                     <DropdownMenuItem
-                        onSelect={(event) => {
+                        onSelect={event => {
                             event.preventDefault();
                             router.push("/portfolio");
                         }}
@@ -102,7 +104,7 @@ export default function ConnectWallet({ className }: { className?: string }) {
                         View portfolio
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                        onSelect={(event) => {
+                        onSelect={event => {
                             event.preventDefault();
                             handleDisconnect();
                         }}

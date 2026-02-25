@@ -8,16 +8,16 @@ export const dynamic = "force-dynamic";
  * Returns all registered pools (from MongoDB registry + on-chain data).
  */
 export async function GET() {
-  try {
-    const result = await getAllPools();
-    return NextResponse.json({
-      totalPools: result.totalPools,
-      totalBchLiquidity: result.totalBchLiquidity,
-      tokenCounts: Object.fromEntries(result.tokenCounts),
-      pools: result.pools,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to fetch pools";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+    try {
+        const result = await getAllPools();
+        return NextResponse.json({
+            totalPools: result.totalPools,
+            totalBchLiquidity: result.totalBchLiquidity,
+            tokenCounts: Object.fromEntries(result.tokenCounts),
+            pools: result.pools,
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to fetch pools";
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
 }

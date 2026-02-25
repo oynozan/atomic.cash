@@ -1,15 +1,15 @@
-import { decodeCashAddress } from '@bitauth/libauth';
-import { NetworkProvider } from 'cashscript';
-import { provider } from '../common';
-import type { TxHistoryItem, TxHistoryResult, GetTxHistoryParams } from './types';
-import { getExplorerUrl } from '../explorer';
+import { decodeCashAddress } from "@bitauth/libauth";
+import { NetworkProvider } from "cashscript";
+import { provider } from "../common";
+import type { TxHistoryItem, TxHistoryResult, GetTxHistoryParams } from "./types";
+import { getExplorerUrl } from "../explorer";
 
 /**
  * Normalize address (basic validation + lowercasing prefix)
  */
 function normalizeAddress(address: string): string | null {
     const decoded = decodeCashAddress(address);
-    if (typeof decoded === 'string') return null;
+    if (typeof decoded === "string") return null;
     // Re-encode to ensure a canonical prefix (bitcoincash:/bchtest:)
     return address.trim();
 }
@@ -35,10 +35,10 @@ export async function getTxHistory(params: GetTxHistoryParams): Promise<TxHistor
             performRequest: (method: string, ...params: unknown[]) => Promise<unknown>;
         };
 
-        const history = await electrum.performRequest(
-            'blockchain.address.get_history',
-            normalized
-        ) as Array<{ tx_hash: string; height: number }>;
+        const history = (await electrum.performRequest(
+            "blockchain.address.get_history",
+            normalized,
+        )) as Array<{ tx_hash: string; height: number }>;
 
         if (!history || history.length === 0) {
             return { transactions: [], total: 0, hasMore: false };
@@ -48,7 +48,7 @@ export async function getTxHistory(params: GetTxHistoryParams): Promise<TxHistor
         const sorted = [...history].sort((a, b) => b.height - a.height);
         const slice = sorted.slice(0, limit);
 
-        const transactions: TxHistoryItem[] = slice.map((item) => ({
+        const transactions: TxHistoryItem[] = slice.map(item => ({
             txid: item.tx_hash,
             blockHeight: item.height,
             explorerUrl: getExplorerUrl(item.tx_hash),
@@ -62,9 +62,9 @@ export async function getTxHistory(params: GetTxHistoryParams): Promise<TxHistor
         };
     } catch (error: unknown) {
         if (error instanceof Error) {
-            console.error('TX history error:', error.message);
+            console.error("TX history error:", error.message);
         } else {
-            console.error('TX history error:', error);
+            console.error("TX history error:", error);
         }
         return { transactions: [], total: 0, hasMore: false };
     }

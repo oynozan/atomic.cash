@@ -2,24 +2,24 @@
  * Network type
  */
 export enum Network {
-    MAINNET = 'mainnet',
-    CHIPNET = 'chipnet',
+    MAINNET = "mainnet",
+    CHIPNET = "chipnet",
 }
 
 /**
  * Swap direction
  */
 export enum SwapDirection {
-    BCH_TO_TOKEN = 'bch_to_token',
-    TOKEN_TO_BCH = 'token_to_bch',
+    BCH_TO_TOKEN = "bch_to_token",
+    TOKEN_TO_BCH = "token_to_bch",
 }
 
 /**
  * Swap type (Uniswap V1 style)
  */
 export enum SwapType {
-    EXACT_INPUT = 'exact_input',
-    EXACT_OUTPUT = 'exact_output',
+    EXACT_INPUT = "exact_input",
+    EXACT_OUTPUT = "exact_output",
 }
 
 /**
@@ -47,9 +47,9 @@ export interface UtxoInput {
         amount: bigint;
     };
     /** Input type */
-    type: 'pool' | 'user';
+    type: "pool" | "user";
     /** Pool unlock function (for pool inputs) */
-    unlockFunction?: 'swapExactInput' | 'swapExactOutput' | 'addLiquidity' | 'removeLiquidity';
+    unlockFunction?: "swapExactInput" | "swapExactOutput" | "addLiquidity" | "removeLiquidity";
 }
 
 /**
@@ -71,10 +71,10 @@ export interface TxOutput {
  * Operation type (for automatic registry)
  */
 export enum OperationType {
-    CREATE_POOL = 'create_pool',
-    ADD_LIQUIDITY = 'add_liquidity',
-    REMOVE_LIQUIDITY = 'remove_liquidity',
-    SWAP = 'swap',
+    CREATE_POOL = "create_pool",
+    ADD_LIQUIDITY = "add_liquidity",
+    REMOVE_LIQUIDITY = "remove_liquidity",
+    SWAP = "swap",
 }
 
 /**

@@ -1,5 +1,5 @@
-import { SwapDirection, SwapType } from '../types';
-import type { UnsignedTxTemplate } from '../types';
+import { SwapDirection, SwapType } from "../types";
+import type { UnsignedTxTemplate } from "../types";
 /**
  * Swap parameters (base)
  */

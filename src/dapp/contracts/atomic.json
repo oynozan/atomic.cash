@@ -1,123 +1,123 @@
 {
-  "contractName": "Atomic",
-  "constructorInputs": [
-    {
-      "name": "poolOwnerPkh",
-      "type": "bytes20"
-    }
-  ],
-  "abi": [
-    {
-      "name": "swapExactInput",
-      "inputs": []
-    },
-    {
-      "name": "swapExactOutput",
-      "inputs": []
-    },
-    {
-      "name": "addLiquidity",
-      "inputs": [
+    "contractName": "Atomic",
+    "constructorInputs": [
         {
-          "name": "poolOwnerPk",
-          "type": "pubkey"
+            "name": "poolOwnerPkh",
+            "type": "bytes20"
+        }
+    ],
+    "abi": [
+        {
+            "name": "swapExactInput",
+            "inputs": []
         },
         {
-          "name": "poolOwnerSig",
-          "type": "sig"
-        }
-      ]
-    },
-    {
-      "name": "removeLiquidity",
-      "inputs": [
-        {
-          "name": "poolOwnerPk",
-          "type": "pubkey"
+            "name": "swapExactOutput",
+            "inputs": []
         },
         {
-          "name": "poolOwnerSig",
-          "type": "sig"
+            "name": "addLiquidity",
+            "inputs": [
+                {
+                    "name": "poolOwnerPk",
+                    "type": "pubkey"
+                },
+                {
+                    "name": "poolOwnerSig",
+                    "type": "sig"
+                }
+            ]
+        },
+        {
+            "name": "removeLiquidity",
+            "inputs": [
+                {
+                    "name": "poolOwnerPk",
+                    "type": "pubkey"
+                },
+                {
+                    "name": "poolOwnerSig",
+                    "type": "sig"
+                }
+            ]
         }
-      ]
-    }
-  ],
-  "bytecode": "OP_OVER OP_0 OP_NUMEQUAL OP_IF OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_TXVERSION OP_2 OP_NUMEQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_UTXOTOKENAMOUNT OP_MUL OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_OUTPUTVALUE OP_SUB OP_ABS OP_3 OP_MUL e803 OP_DIV OP_INPUTINDEX OP_OUTPUTVALUE OP_SWAP OP_SUB OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_MUL OP_LESSTHANOREQUAL OP_NIP OP_NIP OP_ELSE OP_OVER OP_1 OP_NUMEQUAL OP_IF OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_TXVERSION OP_2 OP_NUMEQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_UTXOTOKENAMOUNT OP_MUL OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_OUTPUTVALUE OP_SUB OP_ABS OP_3 OP_MUL e803 OP_DIV OP_INPUTINDEX OP_OUTPUTVALUE OP_SWAP OP_SUB OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_MUL OP_LESSTHANOREQUAL OP_NIP OP_NIP OP_ELSE OP_OVER OP_2 OP_NUMEQUAL OP_IF OP_2 OP_PICK OP_HASH160 OP_EQUALVERIFY OP_ROT OP_ROT OP_CHECKSIGVERIFY OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_ELSE OP_SWAP OP_3 OP_NUMEQUALVERIFY OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIGVERIFY OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_0 OP_GREATERTHAN OP_IF OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_2DUP OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_2DUP OP_EQUALVERIFY OP_2DROP OP_DROP OP_ENDIF OP_DROP OP_1 OP_ENDIF OP_ENDIF OP_ENDIF",
-  "source": "pragma cashscript ^0.12.0;\n\ncontract Atomic(bytes20 poolOwnerPkh) {\n    function swapExactInput() {\n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        \n        require(tx.version == 2);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n        \n        int targetK = tx.inputs[this.activeInputIndex].value \n                    * tx.inputs[this.activeInputIndex].tokenAmount;\n        \n        int tradeValue = abs(\n            tx.inputs[this.activeInputIndex].value \n            - tx.outputs[this.activeInputIndex].value\n        );\n        int fee = (tradeValue * 3) / 1000;\n        \n        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) \n                             * tx.outputs[this.activeInputIndex].tokenAmount;\n\n        require(effectiveOutputK >= targetK);\n    }\n\n    function swapExactOutput() {\n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        require(tx.version == 2);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n        \n        int targetK = tx.inputs[this.activeInputIndex].value \n                    * tx.inputs[this.activeInputIndex].tokenAmount;\n        \n        int tradeValue = abs(\n            tx.inputs[this.activeInputIndex].value \n            - tx.outputs[this.activeInputIndex].value\n        );\n        int fee = (tradeValue * 3) / 1000;\n        \n        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) \n                             * tx.outputs[this.activeInputIndex].tokenAmount;\n        \n        require(effectiveOutputK >= targetK);\n    }\n\n    function addLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {\n        \n        require(hash160(poolOwnerPk) == poolOwnerPkh);\n        require(checkSig(poolOwnerSig, poolOwnerPk));\n        \n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n    }\n\n    function removeLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {\n        \n        require(hash160(poolOwnerPk) == poolOwnerPkh);\n        require(checkSig(poolOwnerSig, poolOwnerPk));\n        \n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        if (tx.outputs[this.activeInputIndex].tokenAmount > 0) {\n            bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n            require(inputToken == outputToken);\n            \n            bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n            bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n            require(inputBytecode == outputBytecode);\n        }\n    }\n}\n",
-  "debug": {
-    "bytecode": "78009c63c0cec0d188c2529dc0c7c0cd88c0c6c0d095c0c6c0cc9490539502e80396c0cc7c94c0d395a177776778519c63c0cec0d188c2529dc0c7c0cd88c0c6c0d095c0c6c0cc9490539502e80396c0cc7c94c0d395a177776778529c635279a9887b7badc0cec0d188c0c7c0cd8777677c539d78a988adc0cec0d300a063c0d16e88c0c7c0cd6e886d75687551686868",
-    "sourceMap": "4:4:28:5;;;;5:37:5:58;:27::73:1;6:39:6:60:0;:28::75:1;7:8:7:43;9:16:9:26:0;:30::31;:8::33:1;11:40:11:61:0;:30::78:1;12:42:12:63:0;:31::80:1;13:8:13:49;15:32:15:53:0;:22::60:1;16:32:16:53:0;:22::66:1;15;19::19:43:0;:12::50:1;20:25:20:46:0;:14::53:1;19:12;18:25:21:9;22:32:22:33:0;:19:::1;:37::41:0;:18:::1;24:43:24:64:0;:32::71:1;:74::77:0;:32:::1;25:42:25:63:0;:31::76:1;24;27:8:27:45;4:4:28:5;;;30::53::0;;;;31:37:31:58;:27::73:1;32:39:32:60:0;:28::75:1;33:8:33:43;34:16:34:26:0;:30::31;:8::33:1;36:40:36:61:0;:30::78:1;37:42:37:63:0;:31::80:1;38:8:38:49;40:32:40:53:0;:22::60:1;41:32:41:53:0;:22::66:1;40;44::44:43:0;:12::50:1;45:25:45:46:0;:14::53:1;44:12;43:25:46:9;47:32:47:33:0;:19:::1;:37::41:0;:18:::1;49:43:49:64:0;:32::71:1;:74::77:0;:32:::1;50:42:50:63:0;:31::76:1;49;52:8:52:45;30:4:53:5;;;55::67::0;;;;57:24:57:35;;:16::36:1;:8::54;58:25:58:37:0;:39::50;:8::53:1;60:37:60:58:0;:27::73:1;61:39:61:60:0;:28::75:1;62:8:62:43;64:40:64:61:0;:30::78:1;65:42:65:63:0;:31::80:1;66:8:66:49;55:4:67:5;;69::83::0;;;71:24:71:35;:16::36:1;:8::54;72::72:53;74:37:74:58:0;:27::73:1;75:23:75:44:0;:12::57:1;:60::61:0;:12:::1;:63:82:9:0;76:43:76:64;:32::79:1;77:20:77:45:0;:12::47:1;79:44:79:65:0;:34::82:1;80:46:80:67:0;:35::84:1;81:20:81:51:0;:12::53:1;75:63:82:9;;;69:4:83:5;;3:0:84:1;;",
-    "logs": [],
-    "requires": [
-      {
-        "ip": 9,
-        "line": 7
-      },
-      {
-        "ip": 12,
-        "line": 9
-      },
-      {
-        "ip": 17,
-        "line": 13
-      },
-      {
-        "ip": 41,
-        "line": 27
-      },
-      {
-        "ip": 52,
-        "line": 33
-      },
-      {
-        "ip": 55,
-        "line": 34
-      },
-      {
-        "ip": 60,
-        "line": 38
-      },
-      {
-        "ip": 84,
-        "line": 52
-      },
-      {
-        "ip": 94,
-        "line": 57
-      },
-      {
-        "ip": 97,
-        "line": 58
-      },
-      {
-        "ip": 102,
-        "line": 62
-      },
-      {
-        "ip": 108,
-        "line": 66
-      },
-      {
-        "ip": 115,
-        "line": 71
-      },
-      {
-        "ip": 116,
-        "line": 72
-      },
-      {
-        "ip": 127,
-        "line": 77
-      },
-      {
-        "ip": 133,
-        "line": 81
-      }
-    ]
-  },
-  "compiler": {
-    "name": "cashc",
-    "version": "0.12.1"
-  },
-  "updatedAt": "2026-02-24T17:40:44.294Z"
+    ],
+    "bytecode": "OP_OVER OP_0 OP_NUMEQUAL OP_IF OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_TXVERSION OP_2 OP_NUMEQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_UTXOTOKENAMOUNT OP_MUL OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_OUTPUTVALUE OP_SUB OP_ABS OP_3 OP_MUL e803 OP_DIV OP_INPUTINDEX OP_OUTPUTVALUE OP_SWAP OP_SUB OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_MUL OP_LESSTHANOREQUAL OP_NIP OP_NIP OP_ELSE OP_OVER OP_1 OP_NUMEQUAL OP_IF OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_TXVERSION OP_2 OP_NUMEQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_UTXOTOKENAMOUNT OP_MUL OP_INPUTINDEX OP_UTXOVALUE OP_INPUTINDEX OP_OUTPUTVALUE OP_SUB OP_ABS OP_3 OP_MUL e803 OP_DIV OP_INPUTINDEX OP_OUTPUTVALUE OP_SWAP OP_SUB OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_MUL OP_LESSTHANOREQUAL OP_NIP OP_NIP OP_ELSE OP_OVER OP_2 OP_NUMEQUAL OP_IF OP_2 OP_PICK OP_HASH160 OP_EQUALVERIFY OP_ROT OP_ROT OP_CHECKSIGVERIFY OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_ELSE OP_SWAP OP_3 OP_NUMEQUALVERIFY OP_OVER OP_HASH160 OP_EQUALVERIFY OP_CHECKSIGVERIFY OP_INPUTINDEX OP_UTXOTOKENCATEGORY OP_INPUTINDEX OP_OUTPUTTOKENAMOUNT OP_0 OP_GREATERTHAN OP_IF OP_INPUTINDEX OP_OUTPUTTOKENCATEGORY OP_2DUP OP_EQUALVERIFY OP_INPUTINDEX OP_UTXOBYTECODE OP_INPUTINDEX OP_OUTPUTBYTECODE OP_2DUP OP_EQUALVERIFY OP_2DROP OP_DROP OP_ENDIF OP_DROP OP_1 OP_ENDIF OP_ENDIF OP_ENDIF",
+    "source": "pragma cashscript ^0.12.0;\n\ncontract Atomic(bytes20 poolOwnerPkh) {\n    function swapExactInput() {\n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        \n        require(tx.version == 2);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n        \n        int targetK = tx.inputs[this.activeInputIndex].value \n                    * tx.inputs[this.activeInputIndex].tokenAmount;\n        \n        int tradeValue = abs(\n            tx.inputs[this.activeInputIndex].value \n            - tx.outputs[this.activeInputIndex].value\n        );\n        int fee = (tradeValue * 3) / 1000;\n        \n        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) \n                             * tx.outputs[this.activeInputIndex].tokenAmount;\n\n        require(effectiveOutputK >= targetK);\n    }\n\n    function swapExactOutput() {\n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        require(tx.version == 2);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n        \n        int targetK = tx.inputs[this.activeInputIndex].value \n                    * tx.inputs[this.activeInputIndex].tokenAmount;\n        \n        int tradeValue = abs(\n            tx.inputs[this.activeInputIndex].value \n            - tx.outputs[this.activeInputIndex].value\n        );\n        int fee = (tradeValue * 3) / 1000;\n        \n        int effectiveOutputK = (tx.outputs[this.activeInputIndex].value - fee) \n                             * tx.outputs[this.activeInputIndex].tokenAmount;\n        \n        require(effectiveOutputK >= targetK);\n    }\n\n    function addLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {\n        \n        require(hash160(poolOwnerPk) == poolOwnerPkh);\n        require(checkSig(poolOwnerSig, poolOwnerPk));\n        \n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n        require(inputToken == outputToken);\n        \n        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n        require(inputBytecode == outputBytecode);\n    }\n\n    function removeLiquidity(pubkey poolOwnerPk, sig poolOwnerSig) {\n        \n        require(hash160(poolOwnerPk) == poolOwnerPkh);\n        require(checkSig(poolOwnerSig, poolOwnerPk));\n        \n        bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;\n        if (tx.outputs[this.activeInputIndex].tokenAmount > 0) {\n            bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;\n            require(inputToken == outputToken);\n            \n            bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;\n            bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;\n            require(inputBytecode == outputBytecode);\n        }\n    }\n}\n",
+    "debug": {
+        "bytecode": "78009c63c0cec0d188c2529dc0c7c0cd88c0c6c0d095c0c6c0cc9490539502e80396c0cc7c94c0d395a177776778519c63c0cec0d188c2529dc0c7c0cd88c0c6c0d095c0c6c0cc9490539502e80396c0cc7c94c0d395a177776778529c635279a9887b7badc0cec0d188c0c7c0cd8777677c539d78a988adc0cec0d300a063c0d16e88c0c7c0cd6e886d75687551686868",
+        "sourceMap": "4:4:28:5;;;;5:37:5:58;:27::73:1;6:39:6:60:0;:28::75:1;7:8:7:43;9:16:9:26:0;:30::31;:8::33:1;11:40:11:61:0;:30::78:1;12:42:12:63:0;:31::80:1;13:8:13:49;15:32:15:53:0;:22::60:1;16:32:16:53:0;:22::66:1;15;19::19:43:0;:12::50:1;20:25:20:46:0;:14::53:1;19:12;18:25:21:9;22:32:22:33:0;:19:::1;:37::41:0;:18:::1;24:43:24:64:0;:32::71:1;:74::77:0;:32:::1;25:42:25:63:0;:31::76:1;24;27:8:27:45;4:4:28:5;;;30::53::0;;;;31:37:31:58;:27::73:1;32:39:32:60:0;:28::75:1;33:8:33:43;34:16:34:26:0;:30::31;:8::33:1;36:40:36:61:0;:30::78:1;37:42:37:63:0;:31::80:1;38:8:38:49;40:32:40:53:0;:22::60:1;41:32:41:53:0;:22::66:1;40;44::44:43:0;:12::50:1;45:25:45:46:0;:14::53:1;44:12;43:25:46:9;47:32:47:33:0;:19:::1;:37::41:0;:18:::1;49:43:49:64:0;:32::71:1;:74::77:0;:32:::1;50:42:50:63:0;:31::76:1;49;52:8:52:45;30:4:53:5;;;55::67::0;;;;57:24:57:35;;:16::36:1;:8::54;58:25:58:37:0;:39::50;:8::53:1;60:37:60:58:0;:27::73:1;61:39:61:60:0;:28::75:1;62:8:62:43;64:40:64:61:0;:30::78:1;65:42:65:63:0;:31::80:1;66:8:66:49;55:4:67:5;;69::83::0;;;71:24:71:35;:16::36:1;:8::54;72::72:53;74:37:74:58:0;:27::73:1;75:23:75:44:0;:12::57:1;:60::61:0;:12:::1;:63:82:9:0;76:43:76:64;:32::79:1;77:20:77:45:0;:12::47:1;79:44:79:65:0;:34::82:1;80:46:80:67:0;:35::84:1;81:20:81:51:0;:12::53:1;75:63:82:9;;;69:4:83:5;;3:0:84:1;;",
+        "logs": [],
+        "requires": [
+            {
+                "ip": 9,
+                "line": 7
+            },
+            {
+                "ip": 12,
+                "line": 9
+            },
+            {
+                "ip": 17,
+                "line": 13
+            },
+            {
+                "ip": 41,
+                "line": 27
+            },
+            {
+                "ip": 52,
+                "line": 33
+            },
+            {
+                "ip": 55,
+                "line": 34
+            },
+            {
+                "ip": 60,
+                "line": 38
+            },
+            {
+                "ip": 84,
+                "line": 52
+            },
+            {
+                "ip": 94,
+                "line": 57
+            },
+            {
+                "ip": 97,
+                "line": 58
+            },
+            {
+                "ip": 102,
+                "line": 62
+            },
+            {
+                "ip": 108,
+                "line": 66
+            },
+            {
+                "ip": 115,
+                "line": 71
+            },
+            {
+                "ip": 116,
+                "line": 72
+            },
+            {
+                "ip": 127,
+                "line": 77
+            },
+            {
+                "ip": 133,
+                "line": 81
+            }
+        ]
+    },
+    "compiler": {
+        "name": "cashc",
+        "version": "0.12.1"
+    },
+    "updatedAt": "2026-02-24T17:40:44.294Z"
 }

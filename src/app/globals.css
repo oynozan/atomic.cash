@@ -100,11 +100,9 @@
 
         &:disabled {
             cursor: default;
+        }
     }
 }
-}
-
-
 
 .home-container {
     width: 1200px;

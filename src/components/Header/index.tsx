@@ -25,19 +25,19 @@ export default function Header() {
                     <Image src="/logo-text.png" alt="Atomic Cash Logo" width={200} height={32} />
                 </Link>
                 <div className="flex gap-5 text-white/60">
-                    <Link href="/" className={navLinkClass("/")}> 
+                    <Link href="/" className={navLinkClass("/")}>
                         Swap
                     </Link>
-                    <Link href="/pools" className={navLinkClass("/pools")}> 
+                    <Link href="/pools" className={navLinkClass("/pools")}>
                         Pools
                     </Link>
-                    <Link href="/tokens" className={navLinkClass("/tokens")}> 
+                    <Link href="/tokens" className={navLinkClass("/tokens")}>
                         Tokens
                     </Link>
-                    <Link href="/trades" className={navLinkClass("/trades")}> 
+                    <Link href="/trades" className={navLinkClass("/trades")}>
                         Trades
                     </Link>
-                    <Link href="/portfolio" className={navLinkClass("/portfolio")}> 
+                    <Link href="/portfolio" className={navLinkClass("/portfolio")}>
                         Portfolio
                     </Link>
                     <Link href="/aUSD" className="text-gold! font-medium text-shadow-2xs text-lg">
@@ -56,5 +56,5 @@ export default function Header() {
                 </div>
             </div>
         </header>
-    )
+    );
 }

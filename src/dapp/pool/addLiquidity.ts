@@ -1,6 +1,6 @@
 // Only the pool owner can add liquidity.
 // The ratio is preserved - the price does not change.
-// 
+//
 // Usage:
 // - if bchAmount is provided, tokenAmount is automatically calculated
 // - if tokenAmount is provided, bchAmount is automatically calculated
@@ -16,23 +16,23 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
-} from '../common';
+} from "../common";
 
-import { DEFAULT_MINER_FEE } from '../config';
-import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
-import type { AddLiquidityParams, AddLiquidityOptions, AddLiquidityResult } from './types';
-import { addressToPkh } from '../queries/user';
+import { DEFAULT_MINER_FEE } from "../config";
+import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "../types";
+import type { AddLiquidityParams, AddLiquidityOptions, AddLiquidityResult } from "./types";
+import { addressToPkh } from "../queries/user";
 
 /**
  * Add liquidity to the pool (ratio is preserved)
- * 
+ *
  * @example
  * ```ts
  * await addLiquidity(
  *   { tokenCategory, bchAmount: 0.01 },
  *   { ownerPublicKey, ownerTokenAddress }
  * );
- * 
+ *
  * await addLiquidity(
  *   { tokenCategory, tokenAmount: 100 },
  *   { ownerPublicKey, ownerTokenAddress }
@@ -41,20 +41,20 @@ import { addressToPkh } from '../queries/user';
  */
 export async function addLiquidity(
     params: AddLiquidityParams,
-    options: AddLiquidityOptions
+    options: AddLiquidityOptions,
 ): Promise<AddLiquidityResult> {
     const { tokenCategory, bchAmount, tokenAmount } = params;
     const { ownerTokenAddress } = options;
 
     // At least one must be provided
     if (bchAmount === undefined && tokenAmount === undefined) {
-        return createErrorResult('bchAmount or tokenAmount must be provided!');
+        return createErrorResult("bchAmount or tokenAmount must be provided!");
     }
 
     // Contract (derive PKH from owner address)
     const ownerPkh = addressToPkh(ownerTokenAddress);
     if (!ownerPkh) {
-        return createErrorResult('Invalid owner token address');
+        return createErrorResult("Invalid owner token address");
     }
     const contract = getExchangeContract(ownerPkh);
     const contractTokenAddress = contract.tokenAddress;
@@ -64,7 +64,7 @@ export async function addLiquidity(
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
 
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found! Create a pool first with createPool.');
+        return createErrorResult("Pool not found! Create a pool first with createPool.");
     }
 
     const currentBch = poolUtxo.satoshis;
@@ -102,11 +102,15 @@ export async function addLiquidity(
     const minerFee = DEFAULT_MINER_FEE;
 
     if (totalBch < bchToAdd + minerFee) {
-        return createErrorResult(`Insufficient BCH! Required: ${satoshiToBch(bchToAdd + minerFee)}, Current: ${satoshiToBch(totalBch)}`);
+        return createErrorResult(
+            `Insufficient BCH! Required: ${satoshiToBch(bchToAdd + minerFee)}, Current: ${satoshiToBch(totalBch)}`,
+        );
     }
 
     if (totalTokens < tokensToAdd) {
-        return createErrorResult(`Insufficient token! Required: ${tokensToAddHuman}, Current: ${tokenFromOnChain(totalTokens, tokenCategory)}`);
+        return createErrorResult(
+            `Insufficient token! Required: ${tokensToAddHuman}, Current: ${tokenFromOnChain(totalTokens, tokenCategory)}`,
+        );
     }
 
     // New pool values
@@ -126,8 +130,8 @@ export async function addLiquidity(
             category: poolUtxo.token.category,
             amount: poolUtxo.token.amount,
         },
-        type: 'pool',
-        unlockFunction: 'addLiquidity',
+        type: "pool",
+        unlockFunction: "addLiquidity",
     });
 
     // Add BCH UTXOs
@@ -138,7 +142,7 @@ export async function addLiquidity(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -151,11 +155,13 @@ export async function addLiquidity(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            token: utxo.token ? {
-                category: utxo.token.category,
-                amount: utxo.token.amount,
-            } : undefined,
-            type: 'user',
+            token: utxo.token
+                ? {
+                      category: utxo.token.category,
+                      amount: utxo.token.amount,
+                  }
+                : undefined,
+            type: "user",
         });
         addedTokens += utxo.token?.amount || 0n;
     }
@@ -164,7 +170,7 @@ export async function addLiquidity(
     outputs.push({
         to: contractTokenAddress,
         amount: newPoolBch,
-        token: { category: tokenCategory, amount: newPoolTokens }
+        token: { category: tokenCategory, amount: newPoolTokens },
     });
 
     // BCH change
@@ -179,7 +185,7 @@ export async function addLiquidity(
         outputs.push({
             to: ownerTokenAddressTokenAware,
             amount: 1000n,
-            token: { category: tokenCategory, amount: tokenChange }
+            token: { category: tokenCategory, amount: tokenChange },
         });
     }
 

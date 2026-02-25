@@ -1,4 +1,4 @@
-import { decodeCashAddress, hexToBin } from '@bitauth/libauth';
+import { decodeCashAddress, hexToBin } from "@bitauth/libauth";
 import {
     provider,
     getExchangeContract,
@@ -7,8 +7,8 @@ import {
     ensureTokenDecimals,
     fetchTokenMetadata,
     bytesToHex,
-} from '../common';
-import type { UserBalance, TokenBalance, PoolSummary } from './types';
+} from "../common";
+import type { UserBalance, TokenBalance, PoolSummary } from "./types";
 
 /**
  * Extract PKH from Cash address
@@ -16,12 +16,12 @@ import type { UserBalance, TokenBalance, PoolSummary } from './types';
  */
 export function addressToPkh(address: string): Uint8Array | null {
     const decoded = decodeCashAddress(address);
-    
-    if (typeof decoded === 'string') {
+
+    if (typeof decoded === "string") {
         // Error
         return null;
     }
-    
+
     // payload is PKH
     return decoded.payload;
 }
@@ -36,7 +36,7 @@ export function addressToPkhHex(address: string): string | null {
 
 /**
  * Get pools by user address
- * 
+ *
  * @example
  * ```ts
  * const pools = await getPoolsByAddress('bchtest:qz...');
@@ -44,25 +44,25 @@ export function addressToPkhHex(address: string): string | null {
  */
 export async function getPoolsByAddress(userAddress: string): Promise<PoolSummary[]> {
     const pkh = addressToPkh(userAddress);
-    
+
     if (!pkh) {
-        throw new Error('Invalid address!');
+        throw new Error("Invalid address!");
     }
-    
+
     const contract = getExchangeContract(pkh);
     const utxos = await contract.getUtxos();
-    
+
     const pools: PoolSummary[] = [];
-    
+
     for (const utxo of utxos) {
         if (!utxo.token) continue;
-        
+
         const metadata = await fetchTokenMetadata(utxo.token.category);
-        
+
         const bchReserve = satoshiToBch(utxo.satoshis);
         const tokenReserve = tokenFromOnChain(utxo.token.amount, utxo.token.category);
         const tokenPriceInBch = bchReserve / tokenReserve;
-        
+
         pools.push({
             poolAddress: contract.tokenAddress,
             poolOwnerPkhHex: bytesToHex(pkh),
@@ -74,13 +74,13 @@ export async function getPoolsByAddress(userAddress: string): Promise<PoolSummar
             tokenPriceInBch,
         });
     }
-    
+
     return pools;
 }
 
 /**
  * Get user BCH and token balances
- * 
+ *
  * @example
  * ```ts
  * const balance = await getUserBalances('bchtest:zz...');
@@ -88,25 +88,25 @@ export async function getPoolsByAddress(userAddress: string): Promise<PoolSummar
  */
 export async function getUserBalances(userTokenAddress: string): Promise<UserBalance> {
     const utxos = await provider.getUtxos(userTokenAddress);
-    
+
     let bchRaw = 0n;
     const tokenMap = new Map<string, bigint>();
-    
+
     for (const utxo of utxos) {
         bchRaw += utxo.satoshis;
-        
+
         if (utxo.token) {
             const existing = tokenMap.get(utxo.token.category) || 0n;
             tokenMap.set(utxo.token.category, existing + utxo.token.amount);
         }
     }
-    
+
     const tokens: TokenBalance[] = [];
-    
+
     for (const [category, amountRaw] of tokenMap) {
         const metadata = await fetchTokenMetadata(category);
         const decimals = metadata?.decimals ?? 8;
-        
+
         tokens.push({
             category,
             symbol: metadata?.symbol,
@@ -117,7 +117,7 @@ export async function getUserBalances(userTokenAddress: string): Promise<UserBal
             iconUrl: metadata?.iconUrl,
         });
     }
-    
+
     return {
         bch: satoshiToBch(bchRaw),
         bchRaw,
@@ -131,27 +131,27 @@ export async function getUserBalances(userTokenAddress: string): Promise<UserBal
 export async function getUserTokenBalance(
     userTokenAddress: string,
     tokenCategory: string,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<TokenBalance | null> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
-    
+
     const utxos = await provider.getUtxos(userTokenAddress);
-    
+
     let amountRaw = 0n;
-    
+
     for (const utxo of utxos) {
         if (utxo.token?.category === tokenCategory) {
             amountRaw += utxo.token.amount;
         }
     }
-    
+
     if (amountRaw === 0n) {
         return null;
     }
-    
+
     const metadata = await fetchTokenMetadata(tokenCategory);
     const decimals = metadata?.decimals ?? 8;
-    
+
     return {
         category: tokenCategory,
         symbol: metadata?.symbol,
@@ -166,17 +166,19 @@ export async function getUserTokenBalance(
 /**
  * Get user BCH balance
  */
-export async function getUserBchBalance(userAddress: string): Promise<{ bch: number; bchRaw: bigint }> {
+export async function getUserBchBalance(
+    userAddress: string,
+): Promise<{ bch: number; bchRaw: bigint }> {
     const utxos = await provider.getUtxos(userAddress);
-    
+
     let bchRaw = 0n;
-    
+
     for (const utxo of utxos) {
         if (!utxo.token) {
             bchRaw += utxo.satoshis;
         }
     }
-    
+
     return {
         bch: satoshiToBch(bchRaw),
         bchRaw,
@@ -188,21 +190,21 @@ export async function getUserBchBalance(userAddress: string): Promise<{ bch: num
  */
 export async function getPoolsByPkhHex(pkhHex: string): Promise<PoolSummary[]> {
     const pkh = hexToBin(pkhHex);
-    
+
     const contract = getExchangeContract(pkh);
     const utxos = await contract.getUtxos();
-    
+
     const pools: PoolSummary[] = [];
-    
+
     for (const utxo of utxos) {
         if (!utxo.token) continue;
-        
+
         const metadata = await fetchTokenMetadata(utxo.token.category);
-        
+
         const bchReserve = satoshiToBch(utxo.satoshis);
         const tokenReserve = tokenFromOnChain(utxo.token.amount, utxo.token.category);
         const tokenPriceInBch = bchReserve / tokenReserve;
-        
+
         pools.push({
             poolAddress: contract.tokenAddress,
             poolOwnerPkhHex: pkhHex,
@@ -214,6 +216,6 @@ export async function getPoolsByPkhHex(pkhHex: string): Promise<PoolSummary[]> {
             tokenPriceInBch,
         });
     }
-    
+
     return pools;
 }

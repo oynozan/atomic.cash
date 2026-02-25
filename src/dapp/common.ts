@@ -1,4 +1,4 @@
-import { hash160 } from '@cashscript/utils';
+import { hash160 } from "@cashscript/utils";
 export { hash160 };
 import {
     secp256k1,
@@ -6,7 +6,7 @@ import {
     binToHex,
     decodeCashAddress,
     encodeCashAddress,
-} from '@bitauth/libauth';
+} from "@bitauth/libauth";
 
 export { secp256k1 };
 import {
@@ -16,10 +16,10 @@ import {
     TransactionBuilder,
     type NetworkProvider,
     type Utxo,
-} from 'cashscript';
-import { compileFile } from 'cashc';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+} from "cashscript";
+import { compileFile } from "cashc";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 import {
     NETWORK_STRING,
@@ -27,12 +27,12 @@ import {
     BCH_DECIMALS,
     DEFAULT_TOKEN_DECIMALS,
     ELECTRUM_ENDPOINTS,
-} from './config';
+} from "./config";
 
-import type { TokenMetadata, UnsignedTxTemplate } from './types';
-import { cache } from '../lib/cache';
+import type { TokenMetadata, UnsignedTxTemplate } from "./types";
+import { cache } from "../lib/cache";
 
-const electrumNetwork = NETWORK_STRING as 'mainnet' | 'testnet4' | 'chipnet';
+const electrumNetwork = NETWORK_STRING as "mainnet" | "testnet4" | "chipnet";
 
 // Create Electrum provider with public host selection (first endpoint wins for now).
 function createElectrumProvider(): NetworkProvider {
@@ -48,12 +48,12 @@ function createElectrumProvider(): NetworkProvider {
 
 export const provider: NetworkProvider = createElectrumProvider();
 
-const contractPath = join(dirname(fileURLToPath(import.meta.url)), 'contracts', 'atomic.cash');
+const contractPath = join(dirname(fileURLToPath(import.meta.url)), "contracts", "atomic.cash");
 
 export const artifact = compileFile(contractPath);
 
-const TOKEN_DECIMALS_CACHE_PREFIX = 'token:decimals:';
-const TOKEN_METADATA_CACHE_PREFIX = 'token:metadata:';
+const TOKEN_DECIMALS_CACHE_PREFIX = "token:decimals:";
+const TOKEN_METADATA_CACHE_PREFIX = "token:metadata:";
 
 /**
  * Convert a standard CashAddr (p2pkh / p2sh) to its
@@ -64,20 +64,17 @@ const TOKEN_METADATA_CACHE_PREFIX = 'token:metadata:';
  */
 export function toTokenAddress(address: string): string {
     const decoded = decodeCashAddress(address);
-    
-    if (typeof decoded === 'string') {
+
+    if (typeof decoded === "string") {
         // Decoding failed – return original, upstream code will surface error
         return address;
     }
 
-    if (decoded.type === 'p2pkhWithTokens' || decoded.type === 'p2shWithTokens') {
+    if (decoded.type === "p2pkhWithTokens" || decoded.type === "p2shWithTokens") {
         return address;
     }
 
-    const tokenType =
-        decoded.type === 'p2sh'
-            ? 'p2shWithTokens'
-            : 'p2pkhWithTokens';
+    const tokenType = decoded.type === "p2sh" ? "p2shWithTokens" : "p2pkhWithTokens";
 
     const encoded = encodeCashAddress({
         prefix: decoded.prefix,
@@ -85,7 +82,7 @@ export function toTokenAddress(address: string): string {
         payload: decoded.payload,
     });
 
-    if (typeof encoded === 'string') {
+    if (typeof encoded === "string") {
         // Encoding failed, fall back
         return address;
     }
@@ -115,17 +112,17 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
     const cacheKey = `${TOKEN_METADATA_CACHE_PREFIX}${tokenCategory}`;
     const cached = cache.get<TokenMetadata>(cacheKey);
     if (cached) return cached;
-    
+
     try {
         const response = await fetch(`${BCMR_API_URL}/${tokenCategory}/`);
-        
+
         if (!response.ok) return null;
-        
+
         const data = await response.json();
-        
+
         const metadata: TokenMetadata = {
-            name: data.name || 'Unknown',
-            symbol: data.token?.symbol || 'UNKNOWN',
+            name: data.name || "Unknown",
+            symbol: data.token?.symbol || "UNKNOWN",
             decimals: data.token?.decimals ?? DEFAULT_TOKEN_DECIMALS,
             category: tokenCategory,
             iconUrl: data.uris?.icon,
@@ -135,7 +132,7 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
 
         cache.set<TokenMetadata>(cacheKey, metadata);
         setTokenDecimals(tokenCategory, metadata.decimals);
-        
+
         return metadata;
     } catch {
         return null;
@@ -146,17 +143,17 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
  * Get token decimal value from cache or fetch from BCMR
  */
 export async function ensureTokenDecimals(
-    tokenCategory: string, 
-    providedDecimals?: number
+    tokenCategory: string,
+    providedDecimals?: number,
 ): Promise<number> {
     if (providedDecimals !== undefined) {
         setTokenDecimals(tokenCategory, providedDecimals);
         return providedDecimals;
     }
-    
+
     const cached = cache.get<number>(`${TOKEN_DECIMALS_CACHE_PREFIX}${tokenCategory}`);
     if (cached !== undefined) return cached;
-    
+
     const metadata = await fetchTokenMetadata(tokenCategory);
     return metadata?.decimals ?? DEFAULT_TOKEN_DECIMALS;
 }
@@ -227,20 +224,20 @@ export function getExchangeContractFromPublicKey(publicKey: Uint8Array): Contrac
  */
 export async function findPoolsForToken(
     tokenCategory: string,
-    knownPoolOwnerPkhs: Uint8Array[]
+    knownPoolOwnerPkhs: Uint8Array[],
 ): Promise<{ contract: Contract; utxo: Utxo; poolOwnerPkh: Uint8Array }[]> {
     const pools: { contract: Contract; utxo: Utxo; poolOwnerPkh: Uint8Array }[] = [];
-    
+
     for (const pkh of knownPoolOwnerPkhs) {
         const contract = getExchangeContract(pkh);
         const utxos = await contract.getUtxos();
         const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
-        
+
         if (poolUtxo) {
             pools.push({ contract, utxo: poolUtxo, poolOwnerPkh: pkh });
         }
     }
-    
+
     return pools;
 }
 
@@ -254,22 +251,22 @@ export function createSignatureTemplate(privateKey: Uint8Array): SignatureTempla
 
 /**
  * Sign and broadcast unsigned TX template
- * 
+ *
  * @param template - TX template to sign
  * @param signerPrivateKey - Signing private key
  * @returns Transaction ID
  */
 export async function signAndBroadcast(
     template: UnsignedTxTemplate,
-    signerPrivateKey: Uint8Array
+    signerPrivateKey: Uint8Array,
 ): Promise<string> {
     const { inputs, outputs, poolOwnerPkhHex } = template;
     const poolOwnerPkh = hexToBin(poolOwnerPkhHex);
     const contract = getExchangeContract(poolOwnerPkh);
-    
+
     // Create signature template
     const sigTemplate = createSignatureTemplate(signerPrivateKey);
-    
+
     // Create public key
     const publicKey = secp256k1.derivePublicKeyCompressed(signerPrivateKey) as Uint8Array;
 
@@ -282,26 +279,34 @@ export async function signAndBroadcast(
             txid: input.txid,
             vout: input.vout,
             satoshis: input.satoshis,
-            token: input.token ? {
-                category: input.token.category,
-                amount: input.token.amount,
-            } : undefined,
+            token: input.token
+                ? {
+                      category: input.token.category,
+                      amount: input.token.amount,
+                  }
+                : undefined,
         };
 
-        if (input.type === 'pool' && input.unlockFunction) {
+        if (input.type === "pool" && input.unlockFunction) {
             // Pool UTXO - contract unlock function
             switch (input.unlockFunction) {
-                case 'swapExactInput':
+                case "swapExactInput":
                     builder = builder.addInput(utxo, contract.unlock.swapExactInput());
                     break;
-                case 'swapExactOutput':
+                case "swapExactOutput":
                     builder = builder.addInput(utxo, contract.unlock.swapExactOutput());
                     break;
-                case 'addLiquidity':
-                    builder = builder.addInput(utxo, contract.unlock.addLiquidity(publicKey, sigTemplate));
+                case "addLiquidity":
+                    builder = builder.addInput(
+                        utxo,
+                        contract.unlock.addLiquidity(publicKey, sigTemplate),
+                    );
                     break;
-                case 'removeLiquidity':
-                    builder = builder.addInput(utxo, contract.unlock.removeLiquidity(publicKey, sigTemplate));
+                case "removeLiquidity":
+                    builder = builder.addInput(
+                        utxo,
+                        contract.unlock.removeLiquidity(publicKey, sigTemplate),
+                    );
                     break;
             }
         } else {
@@ -331,14 +336,14 @@ export async function signAndBroadcast(
 
     // Build and broadcast
     const tx = await builder.send();
-    
+
     return tx.txid;
 }
 
 /**
  * Calculate price for exact input
  * User sends inputAmount, they receive outputAmount
- * 
+ *
  * @param inputAmount - Amount to send (satoshi/raw)
  * @param inputReserve - Input reserve in the pool
  * @param outputReserve - Output reserve in the pool
@@ -347,18 +352,18 @@ export async function signAndBroadcast(
 export function getInputPrice(
     inputAmount: bigint,
     inputReserve: bigint,
-    outputReserve: bigint
+    outputReserve: bigint,
 ): bigint {
     const inputAmountWithFee = inputAmount * 997n;
     const numerator = inputAmountWithFee * outputReserve;
-    const denominator = (inputReserve * 1000n) + inputAmountWithFee;
+    const denominator = inputReserve * 1000n + inputAmountWithFee;
     return numerator / denominator;
 }
 
 /**
  * Calculate price for exact output
  * User wants to receive outputAmount, they need to send inputAmount
- * 
+ *
  * @param outputAmount - Amount to receive
  * @param inputReserve - Input reserve in the pool
  * @param outputReserve - Output reserve in the pool
@@ -367,24 +372,21 @@ export function getInputPrice(
 export function getOutputPrice(
     outputAmount: bigint,
     inputReserve: bigint,
-    outputReserve: bigint
+    outputReserve: bigint,
 ): bigint {
     const numerator = inputReserve * outputAmount * 1000n;
     const denominator = (outputReserve - outputAmount) * 997n;
-    return (numerator / denominator) + 1n;
+    return numerator / denominator + 1n;
 }
 
 /**
  * Calculate price impact (%)
- * 
+ *
  * @param inputAmount - Amount to send
  * @param inputReserve - Input reserve in the pool
  * @returns Price impact percentage
  */
-export function calculatePriceImpact(
-    inputAmount: bigint,
-    inputReserve: bigint
-): number {
+export function calculatePriceImpact(inputAmount: bigint, inputReserve: bigint): number {
     // Simple formula: impact = inputAmount / (inputReserve + inputAmount)
     const impact = Number(inputAmount) / Number(inputReserve + inputAmount);
     return impact * 100;

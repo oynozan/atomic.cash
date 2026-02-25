@@ -4,8 +4,8 @@
 //
 // IMPORTANT: If there are other pools in the market, the new pool should be at the market price. Otherwise, you will be an arbitrage victim!
 
-import { hash160 } from '@cashscript/utils';
-import { hexToBin } from '@bitauth/libauth';
+import { hash160 } from "@cashscript/utils";
+import { hexToBin } from "@bitauth/libauth";
 import {
     provider,
     bchToSatoshi,
@@ -17,14 +17,14 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
-} from '../common';
+} from "../common";
 
-import { DEFAULT_MINER_FEE } from '../config';
-import { OperationType } from '../types';
-import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
-import type { CreatePoolParams, CreatePoolOptions, CreatePoolResult } from './types';
-import { getRegisteredOwners } from '../queries/registry';
-import { addressToPkh } from '../queries/user';
+import { DEFAULT_MINER_FEE } from "../config";
+import { OperationType } from "../types";
+import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "../types";
+import type { CreatePoolParams, CreatePoolOptions, CreatePoolResult } from "./types";
+import { getRegisteredOwners } from "../queries/registry";
+import { addressToPkh } from "../queries/user";
 
 export async function getMarketPrice(tokenCategory: string): Promise<{
     hasMarket: boolean;
@@ -34,23 +34,23 @@ export async function getMarketPrice(tokenCategory: string): Promise<{
 } | null> {
     const owners = await getRegisteredOwners();
     if (owners.length === 0) return null;
-    
+
     let totalBch = 0;
     let totalTokens = 0;
     let poolCount = 0;
-    
+
     for (const owner of owners) {
         try {
             const pkh = hexToBin(owner.pkhHex);
             const contract = getExchangeContract(pkh);
             const utxos = await contract.getUtxos();
-            
+
             const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
             if (!poolUtxo || !poolUtxo.token) continue;
-            
+
             const bch = satoshiToBch(poolUtxo.satoshis);
             const tokens = tokenFromOnChain(poolUtxo.token.amount, tokenCategory);
-            
+
             totalBch += bch;
             totalTokens += tokens;
             poolCount++;
@@ -58,9 +58,9 @@ export async function getMarketPrice(tokenCategory: string): Promise<{
             continue;
         }
     }
-    
+
     if (poolCount === 0) return null;
-    
+
     return {
         hasMarket: true,
         avgPrice: totalBch / totalTokens, // BCH per token
@@ -71,16 +71,16 @@ export async function getMarketPrice(tokenCategory: string): Promise<{
 
 /**
  * Create new liquidity pool
- * 
+ *
  * @returns Unsigned TX template - to be signed and broadcasted in the client
- * 
+ *
  * @example
  * ```ts
  * const result = await createPool(
  *   { tokenCategory: '1d2aad...', bchAmount: 0.1, tokenAmount: 1000 },
  *   { ownerPublicKey, ownerTokenAddress }
  * );
- * 
+ *
  * const result = await createPool(
  *   { tokenCategory: '1d2aad...', bchAmount: 0.1, useMarketPrice: true },
  *   { ownerPublicKey, ownerTokenAddress }
@@ -89,10 +89,10 @@ export async function getMarketPrice(tokenCategory: string): Promise<{
  */
 export async function createPool(
     params: CreatePoolParams,
-    options: CreatePoolOptions
+    options: CreatePoolOptions,
 ): Promise<CreatePoolResult> {
-    const { 
-        tokenCategory, 
+    const {
+        tokenCategory,
         priceDeviationTolerance = 1, // default %1
         useMarketPrice = false,
     } = params;
@@ -102,7 +102,7 @@ export async function createPool(
     const marketInfo = await getMarketPrice(tokenCategory);
     let marketPrice: number | undefined;
     let priceDeviation: number | undefined;
-    
+
     if (marketInfo && marketInfo.hasMarket) {
         marketPrice = marketInfo.avgPrice;
 
@@ -111,7 +111,10 @@ export async function createPool(
             const hasBch = bchAmount !== undefined;
             const hasToken = tokenAmount !== undefined;
             if ((hasBch && hasToken) || (!hasBch && !hasToken)) {
-                return { success: false, error: 'Provide ONLY bchAmount OR tokenAmount when market pools exist.' };
+                return {
+                    success: false,
+                    error: "Provide ONLY bchAmount OR tokenAmount when market pools exist.",
+                };
             }
 
             if (bchAmount !== undefined && tokenAmount === undefined) {
@@ -123,20 +126,24 @@ export async function createPool(
             // Manual price: require both amounts and enforce deviation tolerance
             if (bchAmount !== undefined && tokenAmount !== undefined) {
                 const proposedPrice = bchAmount / tokenAmount;
-                priceDeviation = Math.abs(proposedPrice - marketPrice) / marketPrice * 100;
-                
+                priceDeviation = (Math.abs(proposedPrice - marketPrice) / marketPrice) * 100;
+
                 if (priceDeviation > priceDeviationTolerance) {
-                    return { success: false, error: `Price deviation is too high: ${priceDeviation.toFixed(2)}%` };
+                    return {
+                        success: false,
+                        error: `Price deviation is too high: ${priceDeviation.toFixed(2)}%`,
+                    };
                 }
             }
         }
     }
-    
+
     // Amount check
     if (bchAmount === undefined || tokenAmount === undefined) {
-        const error = marketInfo && marketInfo.hasMarket
-            ? 'Provide ONLY bchAmount OR tokenAmount when market pools exist.'
-            : 'Both bchAmount and tokenAmount are required for the first pool.';
+        const error =
+            marketInfo && marketInfo.hasMarket
+                ? "Provide ONLY bchAmount OR tokenAmount when market pools exist."
+                : "Both bchAmount and tokenAmount are required for the first pool.";
         return { success: false, error };
     }
 
@@ -147,7 +154,7 @@ export async function createPool(
     // Create contract with pool owner PKH (from address)
     const ownerPkh = addressToPkh(ownerTokenAddress);
     if (!ownerPkh) {
-        return { success: false, error: 'Invalid owner token address' };
+        return { success: false, error: "Invalid owner token address" };
     }
     const contract = getExchangeContract(ownerPkh);
     const contractAddress = contract.address;
@@ -158,7 +165,7 @@ export async function createPool(
     const existingPool = existingUtxos.find(u => u.token?.category === tokenCategory);
 
     if (existingPool) {
-        const error = 'Pool already exists for this token! use addLiquidity instead.';
+        const error = "Pool already exists for this token! use addLiquidity instead.";
         return { success: false, error };
     }
 
@@ -197,7 +204,7 @@ export async function createPool(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -210,11 +217,13 @@ export async function createPool(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            token: utxo.token ? {
-                category: utxo.token.category,
-                amount: utxo.token.amount,
-            } : undefined,
-            type: 'user',
+            token: utxo.token
+                ? {
+                      category: utxo.token.category,
+                      amount: utxo.token.amount,
+                  }
+                : undefined,
+            type: "user",
         });
         addedTokens += utxo.token?.amount || 0n;
     }
@@ -223,7 +232,7 @@ export async function createPool(
     outputs.push({
         to: contractTokenAddress,
         amount: bchAmountRaw,
-        token: { category: tokenCategory, amount: tokenAmountRaw }
+        token: { category: tokenCategory, amount: tokenAmountRaw },
     });
 
     // Output 1: BCH change
@@ -238,7 +247,7 @@ export async function createPool(
         outputs.push({
             to: ownerTokenAddressTokenAware,
             amount: 1000n,
-            token: { category: tokenCategory, amount: tokenChange }
+            token: { category: tokenCategory, amount: tokenChange },
         });
     }
 

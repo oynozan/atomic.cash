@@ -1,15 +1,10 @@
-import { hexToBin } from '@bitauth/libauth';
-import {
-    getExchangeContract,
-    satoshiToBch,
-    tokenFromOnChain,
-    fetchTokenMetadata,
-} from '../common';
-import { getPoolOwnersCollection } from '@/lib/mongodb';
-import type { RegisteredPoolOwner, AllPoolsResult, PoolSummary } from './types';
-import { getOrSet } from '@/lib/cache';
+import { hexToBin } from "@bitauth/libauth";
+import { getExchangeContract, satoshiToBch, tokenFromOnChain, fetchTokenMetadata } from "../common";
+import { getPoolOwnersCollection } from "@/lib/mongodb";
+import type { RegisteredPoolOwner, AllPoolsResult, PoolSummary } from "./types";
+import { getOrSet } from "@/lib/cache";
 
-const ALL_POOLS_CACHE_KEY = 'registry:all-pools';
+const ALL_POOLS_CACHE_KEY = "registry:all-pools";
 // Pool liquidity and counts do not need sub-second accuracy,
 // so a short-lived TTL is acceptable to reduce load.
 const ALL_POOLS_TTL_MS = 15_000;
@@ -22,7 +17,7 @@ const POOLS_FOR_TOKEN_TTL_MS = 15_000;
 export async function registerPoolOwner(
     pkhHex: string,
     address?: string,
-    label?: string
+    label?: string,
 ): Promise<void> {
     const col = await getPoolOwnersCollection();
     const existing = await col.findOne({ pkhHex });
@@ -40,7 +35,7 @@ export async function registerPoolOwner(
  * Register multiple pool owners
  */
 export async function registerPoolOwners(
-    owners: Array<{ pkhHex: string; address?: string; label?: string }>
+    owners: Array<{ pkhHex: string; address?: string; label?: string }>,
 ): Promise<void> {
     const col = await getPoolOwnersCollection();
     for (const owner of owners) {
@@ -62,7 +57,7 @@ export async function registerPoolOwners(
 export async function getRegisteredOwners(): Promise<RegisteredPoolOwner[]> {
     const col = await getPoolOwnersCollection();
     const docs = await col.find({}).sort({ registeredAt: 1 }).toArray();
-    return docs.map((d) => ({
+    return docs.map(d => ({
         pkhHex: d.pkhHex,
         address: d.address,
         label: d.label,
@@ -166,7 +161,7 @@ export async function getPoolsForToken(tokenCategory: string): Promise<PoolSumma
                 const contract = getExchangeContract(pkh);
                 const utxos = await contract.getUtxos();
 
-                const poolUtxo = utxos.find((u) => u.token?.category === tokenCategory);
+                const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
 
                 if (poolUtxo && poolUtxo.token) {
                     const metadata = await fetchTokenMetadata(tokenCategory);
@@ -192,7 +187,7 @@ export async function getPoolsForToken(tokenCategory: string): Promise<PoolSumma
             pools.sort((a, b) => b.bchReserve - a.bchReserve);
             return pools;
         },
-        POOLS_FOR_TOKEN_TTL_MS
+        POOLS_FOR_TOKEN_TTL_MS,
     );
 }
 

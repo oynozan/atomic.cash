@@ -22,10 +22,10 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
-} from '../common';
+} from "../common";
 
-import { SwapDirection, SwapType } from '../types';
-import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
+import { SwapDirection, SwapType } from "../types";
+import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "../types";
 import type {
     SwapExactBchForTokensParams,
     SwapBchForExactTokensParams,
@@ -33,9 +33,9 @@ import type {
     SwapTokensForExactBchParams,
     SwapOptions,
     SwapResult,
-} from './types';
+} from "./types";
 
-import { DEFAULT_MINER_FEE, DEFAULT_SLIPPAGE_TOLERANCE } from '../config';
+import { DEFAULT_MINER_FEE, DEFAULT_SLIPPAGE_TOLERANCE } from "../config";
 
 async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
     const contract = getExchangeContract(poolOwnerPkh);
@@ -43,15 +43,15 @@ async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
     return {
         contract,
         contractTokenAddress: contract.tokenAddress, // Token supported address
-        poolUtxo: utxos.find(u => u.token?.category === tokenCategory)
+        poolUtxo: utxos.find(u => u.token?.category === tokenCategory),
     };
 }
 
 /**
  * Swap exact BCH for tokens
- * 
+ *
  * @returns Unsigned TX template - to be signed and broadcasted in the client
- * 
+ *
  * @example
  * ```ts
  * const result = await swapExactBchForTokens(
@@ -65,20 +65,20 @@ async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
  *     userAddress: wallet.tokenAddress,
  *   }
  * );
- * 
+ *
  * ```
  */
 export async function swapExactBchForTokens(
     params: SwapExactBchForTokensParams,
-    options: SwapOptions
+    options: SwapOptions,
 ): Promise<SwapResult> {
-    const { 
-        tokenCategory, 
-        bchAmount, 
+    const {
+        tokenCategory,
+        bchAmount,
         minTokens = 0,
         slippageTolerance = DEFAULT_SLIPPAGE_TOLERANCE,
     } = params;
-    
+
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
 
@@ -87,7 +87,11 @@ export async function swapExactBchForTokens(
     // Get pool UTXO
     const { contractTokenAddress, poolUtxo } = await getPoolUtxo(poolOwnerPkh, tokenCategory);
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found!', SwapDirection.BCH_TO_TOKEN, SwapType.EXACT_INPUT);
+        return createErrorResult(
+            "Pool not found!",
+            SwapDirection.BCH_TO_TOKEN,
+            SwapType.EXACT_INPUT,
+        );
     }
 
     const poolBch = poolUtxo.satoshis;
@@ -98,15 +102,16 @@ export async function swapExactBchForTokens(
     const tokensOutHuman = tokenFromOnChain(tokensOut, tokenCategory);
 
     // Slippage control
-    const minTokensRaw = minTokens > 0 
-        ? tokenToOnChain(minTokens, tokenCategory)
-        : tokensOut * BigInt(Math.floor((100 - slippageTolerance) * 10)) / 1000n;
+    const minTokensRaw =
+        minTokens > 0
+            ? tokenToOnChain(minTokens, tokenCategory)
+            : (tokensOut * BigInt(Math.floor((100 - slippageTolerance) * 10))) / 1000n;
 
     if (tokensOut < minTokensRaw) {
         return createErrorResult(
             `Slippage: ${tokensOutHuman} < ${tokenFromOnChain(minTokensRaw, tokenCategory)}`,
             SwapDirection.BCH_TO_TOKEN,
-            SwapType.EXACT_INPUT
+            SwapType.EXACT_INPUT,
         );
     }
 
@@ -126,7 +131,7 @@ export async function swapExactBchForTokens(
         return createErrorResult(
             `Insufficient BCH! Required: ${satoshiToBch(bchAmountRaw + minerFee)}`,
             SwapDirection.BCH_TO_TOKEN,
-            SwapType.EXACT_INPUT
+            SwapType.EXACT_INPUT,
         );
     }
 
@@ -139,12 +144,14 @@ export async function swapExactBchForTokens(
         txid: poolUtxo.txid,
         vout: poolUtxo.vout,
         satoshis: poolUtxo.satoshis,
-        token: poolUtxo.token ? {
-            category: poolUtxo.token.category,
-            amount: poolUtxo.token.amount,
-        } : undefined,
-        type: 'pool',
-        unlockFunction: 'swapExactInput',
+        token: poolUtxo.token
+            ? {
+                  category: poolUtxo.token.category,
+                  amount: poolUtxo.token.amount,
+              }
+            : undefined,
+        type: "pool",
+        unlockFunction: "swapExactInput",
     });
 
     // User BCH inputs
@@ -155,7 +162,7 @@ export async function swapExactBchForTokens(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -168,14 +175,14 @@ export async function swapExactBchForTokens(
     outputs.push({
         to: contractTokenAddress,
         amount: newPoolBch,
-        token: { category: tokenCategory, amount: newPoolTokens }
+        token: { category: tokenCategory, amount: newPoolTokens },
     });
 
     // Output 1: To user (token-capable address)
     outputs.push({
         to: tokenAddress,
         amount: 1000n,
-        token: { category: tokenCategory, amount: tokensOut }
+        token: { category: tokenCategory, amount: tokensOut },
     });
 
     // Output 2: BCH change
@@ -221,15 +228,15 @@ export async function swapExactBchForTokens(
  */
 export async function swapBchForExactTokens(
     params: SwapBchForExactTokensParams,
-    options: SwapOptions
+    options: SwapOptions,
 ): Promise<SwapResult> {
-    const { 
-        tokenCategory, 
-        tokenAmount, 
+    const {
+        tokenCategory,
+        tokenAmount,
         maxBch,
         slippageTolerance = DEFAULT_SLIPPAGE_TOLERANCE,
     } = params;
-    
+
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
 
@@ -237,7 +244,11 @@ export async function swapBchForExactTokens(
 
     const { contractTokenAddress, poolUtxo } = await getPoolUtxo(poolOwnerPkh, tokenCategory);
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found!', SwapDirection.BCH_TO_TOKEN, SwapType.EXACT_OUTPUT);
+        return createErrorResult(
+            "Pool not found!",
+            SwapDirection.BCH_TO_TOKEN,
+            SwapType.EXACT_OUTPUT,
+        );
     }
 
     const poolBch = poolUtxo.satoshis;
@@ -248,7 +259,7 @@ export async function swapBchForExactTokens(
         return createErrorResult(
             `Pool does not have enough tokens! Required: ${tokenAmount}, Available: ${tokenFromOnChain(poolTokens, tokenCategory)}`,
             SwapDirection.BCH_TO_TOKEN,
-            SwapType.EXACT_OUTPUT
+            SwapType.EXACT_OUTPUT,
         );
     }
 
@@ -257,15 +268,15 @@ export async function swapBchForExactTokens(
     const bchRequiredHuman = satoshiToBch(bchRequired);
 
     // Maximum control
-    const maxBchRaw = maxBch 
+    const maxBchRaw = maxBch
         ? bchToSatoshi(maxBch)
-        : bchRequired * BigInt(Math.floor((100 + slippageTolerance) * 10)) / 1000n;
+        : (bchRequired * BigInt(Math.floor((100 + slippageTolerance) * 10))) / 1000n;
 
     if (bchRequired > maxBchRaw) {
         return createErrorResult(
             `Slippage: ${bchRequiredHuman} > ${satoshiToBch(maxBchRaw)}`,
             SwapDirection.BCH_TO_TOKEN,
-            SwapType.EXACT_OUTPUT
+            SwapType.EXACT_OUTPUT,
         );
     }
 
@@ -280,7 +291,11 @@ export async function swapBchForExactTokens(
     const minerFee = DEFAULT_MINER_FEE;
 
     if (userBch < bchRequired + minerFee) {
-        return createErrorResult('Insufficient BCH!', SwapDirection.BCH_TO_TOKEN, SwapType.EXACT_OUTPUT);
+        return createErrorResult(
+            "Insufficient BCH!",
+            SwapDirection.BCH_TO_TOKEN,
+            SwapType.EXACT_OUTPUT,
+        );
     }
 
     // Create unsigned TX template
@@ -291,12 +306,14 @@ export async function swapBchForExactTokens(
         txid: poolUtxo.txid,
         vout: poolUtxo.vout,
         satoshis: poolUtxo.satoshis,
-        token: poolUtxo.token ? {
-            category: poolUtxo.token.category,
-            amount: poolUtxo.token.amount,
-        } : undefined,
-        type: 'pool',
-        unlockFunction: 'swapExactOutput',
+        token: poolUtxo.token
+            ? {
+                  category: poolUtxo.token.category,
+                  amount: poolUtxo.token.amount,
+              }
+            : undefined,
+        type: "pool",
+        unlockFunction: "swapExactOutput",
     });
 
     let addedBch = 0n;
@@ -306,7 +323,7 @@ export async function swapBchForExactTokens(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -317,14 +334,14 @@ export async function swapBchForExactTokens(
     outputs.push({
         to: contractTokenAddress,
         amount: newPoolBch,
-        token: { category: tokenCategory, amount: newPoolTokens }
+        token: { category: tokenCategory, amount: newPoolTokens },
     });
 
     outputs.push({
         // Token output to token-capable address
         to: tokenAddress,
         amount: 1000n,
-        token: { category: tokenCategory, amount: tokenAmountRaw }
+        token: { category: tokenCategory, amount: tokenAmountRaw },
     });
 
     const change = addedBch - bchRequired - minerFee;
@@ -369,15 +386,15 @@ export async function swapBchForExactTokens(
  */
 export async function swapExactTokensForBch(
     params: SwapExactTokensForBchParams,
-    options: SwapOptions
+    options: SwapOptions,
 ): Promise<SwapResult> {
-    const { 
-        tokenCategory, 
-        tokenAmount, 
+    const {
+        tokenCategory,
+        tokenAmount,
         minBch = 0,
         slippageTolerance = DEFAULT_SLIPPAGE_TOLERANCE,
     } = params;
-    
+
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
 
@@ -385,7 +402,11 @@ export async function swapExactTokensForBch(
 
     const { contractTokenAddress, poolUtxo } = await getPoolUtxo(poolOwnerPkh, tokenCategory);
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found!', SwapDirection.TOKEN_TO_BCH, SwapType.EXACT_INPUT);
+        return createErrorResult(
+            "Pool not found!",
+            SwapDirection.TOKEN_TO_BCH,
+            SwapType.EXACT_INPUT,
+        );
     }
 
     const poolBch = poolUtxo.satoshis;
@@ -395,15 +416,16 @@ export async function swapExactTokensForBch(
     const bchOut = getInputPrice(tokenAmountRaw, poolTokens, poolBch);
     const bchOutHuman = satoshiToBch(bchOut);
 
-    const minBchRaw = minBch > 0 
-        ? bchToSatoshi(minBch)
-        : bchOut * BigInt(Math.floor((100 - slippageTolerance) * 10)) / 1000n;
+    const minBchRaw =
+        minBch > 0
+            ? bchToSatoshi(minBch)
+            : (bchOut * BigInt(Math.floor((100 - slippageTolerance) * 10))) / 1000n;
 
     if (bchOut < minBchRaw) {
         return createErrorResult(
             `Slippage: ${bchOutHuman} < ${satoshiToBch(minBchRaw)}`,
             SwapDirection.TOKEN_TO_BCH,
-            SwapType.EXACT_INPUT
+            SwapType.EXACT_INPUT,
         );
     }
 
@@ -421,11 +443,19 @@ export async function swapExactTokensForBch(
     const minerFee = DEFAULT_MINER_FEE;
 
     if (userTokens < tokenAmountRaw) {
-        return createErrorResult('Insufficient tokens!', SwapDirection.TOKEN_TO_BCH, SwapType.EXACT_INPUT);
+        return createErrorResult(
+            "Insufficient tokens!",
+            SwapDirection.TOKEN_TO_BCH,
+            SwapType.EXACT_INPUT,
+        );
     }
 
     if (userBch < minerFee + 1000n) {
-        return createErrorResult('Insufficient BCH for miner fee!', SwapDirection.TOKEN_TO_BCH, SwapType.EXACT_INPUT);
+        return createErrorResult(
+            "Insufficient BCH for miner fee!",
+            SwapDirection.TOKEN_TO_BCH,
+            SwapType.EXACT_INPUT,
+        );
     }
 
     // Create unsigned TX template
@@ -436,12 +466,14 @@ export async function swapExactTokensForBch(
         txid: poolUtxo.txid,
         vout: poolUtxo.vout,
         satoshis: poolUtxo.satoshis,
-        token: poolUtxo.token ? {
-            category: poolUtxo.token.category,
-            amount: poolUtxo.token.amount,
-        } : undefined,
-        type: 'pool',
-        unlockFunction: 'swapExactInput',
+        token: poolUtxo.token
+            ? {
+                  category: poolUtxo.token.category,
+                  amount: poolUtxo.token.amount,
+              }
+            : undefined,
+        type: "pool",
+        unlockFunction: "swapExactInput",
     });
 
     // BCH (for fee)
@@ -452,7 +484,7 @@ export async function swapExactTokensForBch(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -465,11 +497,13 @@ export async function swapExactTokensForBch(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            token: utxo.token ? {
-                category: utxo.token.category,
-                amount: utxo.token.amount,
-            } : undefined,
-            type: 'user',
+            token: utxo.token
+                ? {
+                      category: utxo.token.category,
+                      amount: utxo.token.amount,
+                  }
+                : undefined,
+            type: "user",
         });
         addedTokens += utxo.token?.amount || 0n;
     }
@@ -481,7 +515,7 @@ export async function swapExactTokensForBch(
     outputs.push({
         to: contractTokenAddress,
         amount: newPoolBch,
-        token: { category: tokenCategory, amount: newPoolTokens }
+        token: { category: tokenCategory, amount: newPoolTokens },
     });
 
     // User BCH output
@@ -497,7 +531,7 @@ export async function swapExactTokensForBch(
             // Token change to token-capable address
             to: tokenAddress,
             amount: 1000n,
-            token: { category: tokenCategory, amount: tokenChange }
+            token: { category: tokenCategory, amount: tokenChange },
         });
     }
 
@@ -538,15 +572,15 @@ export async function swapExactTokensForBch(
  */
 export async function swapTokensForExactBch(
     params: SwapTokensForExactBchParams,
-    options: SwapOptions
+    options: SwapOptions,
 ): Promise<SwapResult> {
-    const { 
-        tokenCategory, 
-        bchAmount, 
+    const {
+        tokenCategory,
+        bchAmount,
         maxTokens,
         slippageTolerance = DEFAULT_SLIPPAGE_TOLERANCE,
     } = params;
-    
+
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
 
@@ -554,7 +588,11 @@ export async function swapTokensForExactBch(
 
     const { contractTokenAddress, poolUtxo } = await getPoolUtxo(poolOwnerPkh, tokenCategory);
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found!', SwapDirection.TOKEN_TO_BCH, SwapType.EXACT_OUTPUT);
+        return createErrorResult(
+            "Pool not found!",
+            SwapDirection.TOKEN_TO_BCH,
+            SwapType.EXACT_OUTPUT,
+        );
     }
 
     const poolBch = poolUtxo.satoshis;
@@ -565,7 +603,7 @@ export async function swapTokensForExactBch(
         return createErrorResult(
             `Pool does not have enough BCH! Required: ${bchAmount}, Available: ${satoshiToBch(poolBch)}`,
             SwapDirection.TOKEN_TO_BCH,
-            SwapType.EXACT_OUTPUT
+            SwapType.EXACT_OUTPUT,
         );
     }
 
@@ -573,15 +611,15 @@ export async function swapTokensForExactBch(
     const tokensRequired = getOutputPrice(bchAmountRaw, poolTokens, poolBch);
     const tokensRequiredHuman = tokenFromOnChain(tokensRequired, tokenCategory);
 
-    const maxTokensRaw = maxTokens 
+    const maxTokensRaw = maxTokens
         ? tokenToOnChain(maxTokens, tokenCategory)
-        : tokensRequired * BigInt(Math.floor((100 + slippageTolerance) * 10)) / 1000n;
+        : (tokensRequired * BigInt(Math.floor((100 + slippageTolerance) * 10))) / 1000n;
 
     if (tokensRequired > maxTokensRaw) {
         return createErrorResult(
             `Slippage: ${tokensRequiredHuman} > ${tokenFromOnChain(maxTokensRaw, tokenCategory)}`,
             SwapDirection.TOKEN_TO_BCH,
-            SwapType.EXACT_OUTPUT
+            SwapType.EXACT_OUTPUT,
         );
     }
 
@@ -598,7 +636,11 @@ export async function swapTokensForExactBch(
     const minerFee = DEFAULT_MINER_FEE;
 
     if (userTokens < tokensRequired) {
-        return createErrorResult('Insufficient tokens!', SwapDirection.TOKEN_TO_BCH, SwapType.EXACT_OUTPUT);
+        return createErrorResult(
+            "Insufficient tokens!",
+            SwapDirection.TOKEN_TO_BCH,
+            SwapType.EXACT_OUTPUT,
+        );
     }
 
     // Create unsigned TX template
@@ -609,12 +651,14 @@ export async function swapTokensForExactBch(
         txid: poolUtxo.txid,
         vout: poolUtxo.vout,
         satoshis: poolUtxo.satoshis,
-        token: poolUtxo.token ? {
-            category: poolUtxo.token.category,
-            amount: poolUtxo.token.amount,
-        } : undefined,
-        type: 'pool',
-        unlockFunction: 'swapExactOutput',
+        token: poolUtxo.token
+            ? {
+                  category: poolUtxo.token.category,
+                  amount: poolUtxo.token.amount,
+              }
+            : undefined,
+        type: "pool",
+        unlockFunction: "swapExactOutput",
     });
 
     let addedBch = 0n;
@@ -624,7 +668,7 @@ export async function swapTokensForExactBch(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -636,11 +680,13 @@ export async function swapTokensForExactBch(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            token: utxo.token ? {
-                category: utxo.token.category,
-                amount: utxo.token.amount,
-            } : undefined,
-            type: 'user',
+            token: utxo.token
+                ? {
+                      category: utxo.token.category,
+                      amount: utxo.token.amount,
+                  }
+                : undefined,
+            type: "user",
         });
         addedTokens += utxo.token?.amount || 0n;
     }
@@ -651,7 +697,7 @@ export async function swapTokensForExactBch(
     outputs.push({
         to: contractTokenAddress,
         amount: newPoolBch,
-        token: { category: tokenCategory, amount: newPoolTokens }
+        token: { category: tokenCategory, amount: newPoolTokens },
     });
 
     outputs.push({
@@ -665,7 +711,7 @@ export async function swapTokensForExactBch(
             // Token change to token-capable address
             to: tokenAddress,
             amount: 1000n,
-            token: { category: tokenCategory, amount: tokenChange }
+            token: { category: tokenCategory, amount: tokenChange },
         });
     }
 
@@ -702,9 +748,9 @@ export async function swapTokensForExactBch(
 }
 
 function createErrorResult(
-    error: string, 
-    direction: SwapDirection, 
-    swapType: SwapType
+    error: string,
+    direction: SwapDirection,
+    swapType: SwapType,
 ): SwapResult {
     return {
         success: false,

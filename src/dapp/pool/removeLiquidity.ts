@@ -1,6 +1,6 @@
 // Only the pool owner can remove liquidity.
 // The ratio is preserved - the price does not change.
-// 
+//
 // Usage:
 // - percentage: Remove %X of the pool (e.g. 50 = %50)
 // - bchAmount: Remove specific BCH, token is calculated proportionally
@@ -15,28 +15,28 @@ import {
     filterBchUtxos,
     bytesToHex,
     toTokenAddress,
-} from '../common';
+} from "../common";
 
-import { DEFAULT_MINER_FEE, DUST_LIMIT } from '../config';
-import type { UnsignedTxTemplate, UtxoInput, TxOutput } from '../types';
-import type { RemoveLiquidityParams, RemoveLiquidityOptions, RemoveLiquidityResult } from './types';
-import { addressToPkh } from '../queries/user';
+import { DEFAULT_MINER_FEE, DUST_LIMIT } from "../config";
+import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "../types";
+import type { RemoveLiquidityParams, RemoveLiquidityOptions, RemoveLiquidityResult } from "./types";
+import { addressToPkh } from "../queries/user";
 
 /**
  * Remove liquidity from the pool (ratio is preserved)
- * 
+ *
  * @example
  * ```ts
  * await removeLiquidity(
  *   { tokenCategory, percentage: 25 },
  *   { ownerPublicKey, ownerTokenAddress }
  * );
- * 
+ *
  * await removeLiquidity(
  *   { tokenCategory, bchAmount: 0.01 },
  *   { ownerPublicKey, ownerTokenAddress }
  * );
- * 
+ *
  * await removeLiquidity(
  *   { tokenCategory, withdrawAll: true },
  *   { ownerPublicKey, ownerTokenAddress }
@@ -45,20 +45,20 @@ import { addressToPkh } from '../queries/user';
  */
 export async function removeLiquidity(
     params: RemoveLiquidityParams,
-    options: RemoveLiquidityOptions
+    options: RemoveLiquidityOptions,
 ): Promise<RemoveLiquidityResult> {
     const { tokenCategory, percentage, bchAmount, withdrawAll = false } = params;
     const { ownerTokenAddress } = options;
 
     // At least one must be provided
     if (!withdrawAll && percentage === undefined && bchAmount === undefined) {
-        return createErrorResult('percentage, bchAmount or withdrawAll must be provided!');
+        return createErrorResult("percentage, bchAmount or withdrawAll must be provided!");
     }
 
     // Contract
     const ownerPkh = addressToPkh(ownerTokenAddress);
     if (!ownerPkh) {
-        return createErrorResult('Invalid owner token address');
+        return createErrorResult("Invalid owner token address");
     }
     const contract = getExchangeContract(ownerPkh);
     const contractTokenAddress = contract.tokenAddress;
@@ -68,7 +68,7 @@ export async function removeLiquidity(
     const poolUtxo = utxos.find(u => u.token?.category === tokenCategory);
 
     if (!poolUtxo || !poolUtxo.token) {
-        return createErrorResult('Pool not found! Create a pool first with createPool.');
+        return createErrorResult("Pool not found! Create a pool first with createPool.");
     }
 
     const currentBch = poolUtxo.satoshis;
@@ -85,9 +85,9 @@ export async function removeLiquidity(
     } else if (percentage !== undefined) {
         // Percentage based withdrawal
         if (percentage <= 0 || percentage > 100) {
-            return createErrorResult('Percentage must be between 1 and 100!');
+            return createErrorResult("Percentage must be between 1 and 100!");
         }
-        
+
         bchToWithdraw = (currentBch * BigInt(percentage)) / 100n;
         tokensToWithdraw = (currentTokens * BigInt(percentage)) / 100n;
     } else {
@@ -106,16 +106,18 @@ export async function removeLiquidity(
     const remainingTokens = currentTokens - tokensToWithdraw;
 
     if (!withdrawAll && remainingBch < DUST_LIMIT) {
-        return createErrorResult(`Pool must have at least ${satoshiToBch(DUST_LIMIT)} BCH! use withdrawAll.`);
+        return createErrorResult(
+            `Pool must have at least ${satoshiToBch(DUST_LIMIT)} BCH! use withdrawAll.`,
+        );
     }
 
     if (bchToWithdraw > currentBch || tokensToWithdraw > currentTokens) {
-        return createErrorResult('Pool does not have enough liquidity!');
+        return createErrorResult("Pool does not have enough liquidity!");
     }
 
     // Ratio check
     if (!withdrawAll && remainingTokens > 0n) {
-        return createErrorResult('Pool must have enough liquidity!');
+        return createErrorResult("Pool must have enough liquidity!");
     }
 
     // For fee, add BCH UTXOs
@@ -137,8 +139,8 @@ export async function removeLiquidity(
             category: poolUtxo.token.category,
             amount: poolUtxo.token.amount,
         },
-        type: 'pool',
-        unlockFunction: 'removeLiquidity',
+        type: "pool",
+        unlockFunction: "removeLiquidity",
     });
 
     // For fee, add BCH UTXOs
@@ -149,7 +151,7 @@ export async function removeLiquidity(
             txid: utxo.txid,
             vout: utxo.vout,
             satoshis: utxo.satoshis,
-            type: 'user',
+            type: "user",
         });
         addedBch += utxo.satoshis;
     }
@@ -169,7 +171,7 @@ export async function removeLiquidity(
         outputs.push({
             to: ownerTokenAddressTokenAware,
             amount: 1000n,
-            token: { category: tokenCategory, amount: currentTokens }
+            token: { category: tokenCategory, amount: currentTokens },
         });
     } else {
         // Partial withdrawal - pool continues
@@ -177,7 +179,7 @@ export async function removeLiquidity(
         outputs.push({
             to: contractTokenAddress,
             amount: remainingBch,
-            token: { category: tokenCategory, amount: remainingTokens }
+            token: { category: tokenCategory, amount: remainingTokens },
         });
 
         // Output 1: Owner BCH
@@ -191,7 +193,7 @@ export async function removeLiquidity(
             outputs.push({
                 to: ownerTokenAddressTokenAware,
                 amount: 1000n,
-                token: { category: tokenCategory, amount: tokensToWithdraw }
+                token: { category: tokenCategory, amount: tokensToWithdraw },
             });
         }
     }

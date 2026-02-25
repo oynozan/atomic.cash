@@ -1,4 +1,3 @@
-
 import {
     getExchangeContract,
     satoshiToBch,
@@ -9,13 +8,13 @@ import {
     bchToSatoshi,
     bytesToHex,
     provider,
-} from '../common';
+} from "../common";
 
-import type { PoolInfo, PoolInfoResult } from './types';
+import type { PoolInfo, PoolInfoResult } from "./types";
 
 /**
  * Get pools for a specific pool owner
- * 
+ *
  * @param poolOwnerPkh - Pool owner PKH
  */
 export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolInfoResult> {
@@ -25,12 +24,15 @@ export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolIn
     const pkhHex = bytesToHex(poolOwnerPkh);
 
     // Group pools by token category
-    const poolsMap = new Map<string, {
-        bch: bigint;
-        tokens: bigint;
-        txid: string;
-        vout: number;
-    }>();
+    const poolsMap = new Map<
+        string,
+        {
+            bch: bigint;
+            tokens: bigint;
+            txid: string;
+            vout: number;
+        }
+    >();
 
     for (const utxo of utxos) {
         if (utxo.token) {
@@ -71,7 +73,8 @@ export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolIn
         if (pool.tokens > 0n && pool.bch > 0n) {
             // Spot price (direct ratio, fee excluded)
             // This is the ratio preserved in liquidity addition/removal
-            tokenPriceInBch = (Number(pool.bch) * Math.pow(10, decimals)) / (Number(pool.tokens) * 1e8);
+            tokenPriceInBch =
+                (Number(pool.bch) * Math.pow(10, decimals)) / (Number(pool.tokens) * 1e8);
             bchPriceInToken = 1 / tokenPriceInBch;
         }
 
@@ -108,7 +111,7 @@ export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolIn
 export async function getPool(
     poolOwnerPkh: Uint8Array,
     tokenCategory: string,
-    tokenDecimals?: number
+    tokenDecimals?: number,
 ): Promise<PoolInfo | null> {
     await ensureTokenDecimals(tokenCategory, tokenDecimals);
 
