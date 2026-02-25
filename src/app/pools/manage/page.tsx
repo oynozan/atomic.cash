@@ -623,7 +623,7 @@ export default function ManagePoolsPage() {
 
   if (!isConnected || !address) {
     return (
-      <section className="w-screen pt-44 flex justify-center">
+      <section className="w-screen pt-44 pb-32 flex justify-center">
         <div className="home-container max-w-xl">
           <Link
             href="/pools"
@@ -647,7 +647,7 @@ export default function ManagePoolsPage() {
 
   if (isInitialLoading) {
     return (
-      <section className="w-screen pt-44 flex justify-center">
+      <section className="w-screen pt-44 pb-32 flex justify-center">
         <div className="home-container max-w-xl">
           <Link
             href="/pools"
@@ -666,7 +666,7 @@ export default function ManagePoolsPage() {
 
   if (error) {
     return (
-      <section className="w-screen pt-44 flex justify-center">
+      <section className="w-screen pt-44 pb-32 flex justify-center">
         <div className="home-container max-w-xl">
           <Link
             href="/pools"
@@ -684,7 +684,7 @@ export default function ManagePoolsPage() {
   }
 
   return (
-    <section className="w-screen pt-44 flex justify-center">
+    <section className="w-screen pt-44 pb-32 flex justify-center">
       <div className="home-container max-w-3xl">
         <Link
           href="/pools"
