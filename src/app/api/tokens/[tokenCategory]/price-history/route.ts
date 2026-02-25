@@ -4,7 +4,7 @@ import { getTransactionsCollection } from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
 
-type PricePoint = { timestamp: number; priceBch: number };
+type PricePoint = { timestamp: number; priceBch: number; volume: number };
 
 type PriceHistoryResponse = {
     tokenCategory: string;
@@ -41,8 +41,12 @@ export async function GET(
 
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
+    const hourMs = 60 * 60 * 1000;
     let start: number;
     switch (range) {
+        case "1h":
+            start = now - hourMs;
+            break;
         case "24h":
         case "1d":
             start = now - dayMs;
@@ -53,6 +57,12 @@ export async function GET(
             break;
         case "30d":
         case "1m":
+            start = now - 30 * dayMs;
+            break;
+        case "90d":
+        case "max":
+            start = now - 90 * dayMs;
+            break;
         default:
             start = now - 30 * dayMs;
             break;
@@ -100,12 +110,16 @@ export async function GET(
                 tradePrice = a.bchOut / a.tokenIn;
             }
             if (tradePrice != null && Number.isFinite(tradePrice)) {
-                points.push({ timestamp: tx.createdAt, priceBch: tradePrice });
+                const volumeBch = (a.bchIn ?? 0) + (a.bchOut ?? 0);
+                points.push({
+                    timestamp: tx.createdAt,
+                    priceBch: tradePrice,
+                    volume: Number.isFinite(volumeBch) && volumeBch > 0 ? volumeBch : 0,
+                });
             }
         }
 
-        // Include initial pool price so that long‑term move (since launch)
-        // matches the percentage change shown in headers.
+        // Include initial pool price if it falls within the requested range.
         const initialTx = await coll
             .find({
                 type: "create_pool",
@@ -116,11 +130,14 @@ export async function GET(
             .toArray();
 
         if (initialTx.length > 0) {
-            const p0 = extractInitialPrice(
-                initialTx[0] as { amounts?: { bchIn?: number; tokenIn?: number } },
-            );
-            if (p0 != null && Number.isFinite(p0) && p0 > 0) {
-                points.push({ timestamp: initialTx[0]!.createdAt, priceBch: p0 });
+            const createdAt = initialTx[0]!.createdAt;
+            if (createdAt >= start) {
+                const p0 = extractInitialPrice(
+                    initialTx[0] as { amounts?: { bchIn?: number; tokenIn?: number } },
+                );
+                if (p0 != null && Number.isFinite(p0) && p0 > 0) {
+                    points.push({ timestamp: createdAt, priceBch: p0, volume: 0 });
+                }
             }
         }
 

@@ -4,34 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 
 import { getExplorerUrl } from "@/dapp/explorer";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
-
-type StoredTrade = {
-    txid: string;
-    address: string;
-    type: "swap";
-    direction?: "bch_to_token" | "token_to_bch";
-    tokenCategory?: string;
-    amounts?: {
-        bchIn?: number;
-        bchOut?: number;
-        tokenIn?: number;
-        tokenOut?: number;
-    };
-    createdAt: number;
-};
-
-type TokenMeta = {
-    symbol?: string;
-    name?: string;
-    iconUrl?: string;
-};
-
-type TradesResponse = {
-    trades: StoredTrade[];
-    total: number;
-    tokenMeta?: Record<string, TokenMeta>;
-};
+import { useTradesStore, type StoredTrade, type TokenMeta } from "@/store/trades";
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -56,38 +29,16 @@ function formatTimeAgo(timestamp: number): string {
 }
 
 export default function TradesTable() {
-    const [data, setData] = useState<TradesResponse | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const data = useTradesStore(s => s.data);
+    const loading = useTradesStore(s => s.loading);
+    const error = useTradesStore(s => s.error);
+    const fetchTrades = useTradesStore(s => s.fetch);
     const PAGE_SIZE = 20;
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     useEffect(() => {
-        let cancelled = false;
-
-        const run = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const json = await fetchJsonOnce<TradesResponse>("/api/trades/recent?limit=50");
-                if (!cancelled) {
-                    setData(json);
-                }
-            } catch (err) {
-                if (!cancelled) {
-                    setError(err instanceof Error ? err.message : "Failed to load trades");
-                }
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-
-        void run();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+        void fetchTrades();
+    }, [fetchTrades]);
 
     const trades = data?.trades ?? [];
     const tokenMeta = data?.tokenMeta ?? {};

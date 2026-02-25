@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     ColorType,
     LineSeries,
+    HistogramSeries,
     createChart,
     TickMarkType,
     type IChartApi,
@@ -12,100 +13,70 @@ import {
     type UTCTimestamp,
 } from "lightweight-charts";
 
-import {
-    usePortfolioBalanceHistoryStore,
-    type BalanceHistoryResponse,
-    type BalanceRange,
-} from "@/store/portfolioBalanceHistory";
+import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { formatBchAmount } from "@/lib/utils";
 
-const RANGES: { key: BalanceRange; label: string }[] = [
-    { key: "1d", label: "1D" },
+type HistoryPoint = { timestamp: number; tvlBch: number; volumeBch: number };
+
+type TvlVolumeHistoryResponse = {
+    range: string;
+    points: HistoryPoint[];
+};
+
+const RANGES = [
     { key: "7d", label: "1W" },
     { key: "30d", label: "1M" },
-    { key: "90d", label: "3M" },
-];
+    { key: "90d", label: "Max" },
+] as const;
 
-const CHART_HEIGHT = 200;
+type RangeKey = (typeof RANGES)[number]["key"];
 
-export default function PortfolioBalanceChart({
-    address,
-    initialData,
-    swapsThisWeek = 0,
-    swappedThisWeekBch = 0,
-}: {
-    address: string;
-    initialData?: BalanceHistoryResponse | null;
-    swapsThisWeek?: number;
-    swappedThisWeekBch?: number;
-}) {
-    const getCached = usePortfolioBalanceHistoryStore(s => s.getCached);
-    const fetchHistory = usePortfolioBalanceHistoryStore(s => s.fetch);
-    const [range, setRange] = useState<BalanceRange>("30d");
-    const [data, setData] = useState<BalanceHistoryResponse | null>(
-        initialData ?? (address ? getCached(address, "30d") : null),
-    );
+const CHART_HEIGHT = 280;
+
+export default function TvlVolumeChart() {
+    const [range, setRange] = useState<RangeKey>("30d");
+    const [data, setData] = useState<TvlVolumeHistoryResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
-    const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const tvlSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const rangeRef = useRef<RangeKey>(range);
+    rangeRef.current = range;
 
-    // Display data: prefer cache for current range, then local data (from fetch or initialData)
-    const cachedForRange = address ? getCached(address, range) : null;
-    const displayData = cachedForRange ?? data;
-
-    // When range or address changes, ensure we have data: use cache or fetch for that range
     useEffect(() => {
-        if (!address) return;
-
-        const cached = getCached(address, range);
-        if (cached) {
-            queueMicrotask(() => {
-                setData(cached);
-                setLoading(false);
-                setError(null);
-            });
-            return;
-        }
-
-        if (initialData != null && range === "30d") {
-            queueMicrotask(() => {
-                setData(initialData);
-                setLoading(false);
-            });
-            return;
-        }
-
         let cancelled = false;
-        queueMicrotask(() => {
+
+        const run = async () => {
             setLoading(true);
             setError(null);
-        });
-        fetchHistory(address, false, range).then(result => {
-            if (!cancelled) {
-                if (result) {
-                    setData(result);
-                    setError(null);
-                } else {
-                    setError("Failed to load balance history");
+            try {
+                const json = await fetchJsonOnce<TvlVolumeHistoryResponse>(
+                    `/api/stats/tvl-volume-history?range=${range}`,
+                );
+                if (!cancelled) {
+                    setData(json);
                 }
-                setLoading(false);
+            } catch (err) {
+                if (!cancelled) {
+                    setError(err instanceof Error ? err.message : "Failed to load chart");
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
-        });
+        };
+
+        void run();
+
         return () => {
             cancelled = true;
         };
-    }, [address, range, getCached, fetchHistory, initialData]);
+    }, [range]);
 
-    useEffect(() => {
-        if (initialData != null && range === "30d") {
-            queueMicrotask(() => setData(initialData));
-        }
-    }, [initialData, range]);
-
-    // Create chart once
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
@@ -167,7 +138,7 @@ export default function PortfolioBalanceChart({
                 borderColor,
                 textColor,
                 borderVisible: true,
-                scaleMargins: { top: 0.1, bottom: 0.2 },
+                scaleMargins: { top: 0.1, bottom: 0.4 },
                 ticksVisible: true,
                 ensureEdgeTickMarksVisible: true,
                 visible: true,
@@ -197,8 +168,10 @@ export default function PortfolioBalanceChart({
             },
         });
 
-        const series = chart.addSeries(LineSeries, {
-            color: "#22c55e",
+        chartRef.current = chart;
+
+        const tvlSeries = chart.addSeries(LineSeries, {
+            color: "#3b82f6",
             lineWidth: 2,
             priceScaleId: "right",
             priceFormat: {
@@ -206,8 +179,20 @@ export default function PortfolioBalanceChart({
                 formatter: (p: number) => formatBchAmount(p),
             },
         });
-        seriesRef.current = series;
-        chartRef.current = chart;
+        tvlSeriesRef.current = tvlSeries;
+
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+            priceFormat: {
+                type: "custom",
+                formatter: (p: number) => formatBchAmount(p),
+            },
+            priceScaleId: "volume",
+        });
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.7, bottom: 0 },
+            borderVisible: false,
+        });
+        volumeSeriesRef.current = volumeSeries;
 
         const ro = new ResizeObserver(entries => {
             for (const e of entries) {
@@ -224,46 +209,46 @@ export default function PortfolioBalanceChart({
 
         return () => {
             ro.disconnect();
-            seriesRef.current = null;
+            volumeSeriesRef.current = null;
+            tvlSeriesRef.current = null;
             chart.remove();
             chartRef.current = null;
         };
     }, []);
 
-    // Update series data when data or range changes
     useEffect(() => {
         const chart = chartRef.current;
-        const series = seriesRef.current;
-        if (!chart || !series) return;
+        const tvlSeries = tvlSeriesRef.current;
+        const volumeSeries = volumeSeriesRef.current;
+        if (!chart || !tvlSeries || !volumeSeries) return;
 
-        const points = displayData?.points ?? [];
-        const lineData: LineData[] = points.map(p => ({
+        const points = data?.points ?? [];
+
+        const tvlData: LineData[] = points.map(p => ({
             time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
-            value: p.valueBch,
+            value: p.tvlBch,
         }));
-        series.setData(lineData);
+        tvlSeries.setData(tvlData);
+
+        const volumeData = points.map(p => ({
+            time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
+            value: p.volumeBch,
+            color: "#64748b",
+        }));
+        volumeSeries.setData(volumeData);
 
         if (points.length > 0) {
             chart.timeScale().fitContent();
         }
-    }, [displayData?.points]);
+    }, [data?.points]);
 
-    const isLoading = loading && !displayData;
-    const hasAnyData = !!(displayData && displayData.points.length > 0);
-
-    if (!address) return null;
+    const isLoading = loading && !data;
+    const hasAnyData = !!(data && data.points.length > 0);
 
     return (
         <div className="rounded-[24px] border bg-popover p-4 flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-sm font-semibold text-foreground">Balance history</h2>
-                    <span className="text-xs text-muted-foreground">
-                        Swaps this week: <span className="font-medium text-foreground">{swapsThisWeek}</span>
-                        {" · "}
-                        <span className="font-medium text-foreground">{formatBchAmount(swappedThisWeekBch)} BCH</span>
-                    </span>
-                </div>
+                <h2 className="text-sm font-semibold text-foreground">TVL & Volume</h2>
                 <div className="flex gap-1">
                     {RANGES.map(r => (
                         <button
@@ -297,9 +282,25 @@ export default function PortfolioBalanceChart({
                 )}
                 {!isLoading && !hasAnyData && (
                     <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs bg-background/40">
-                        No balance history for this period
+                        No data for this period
                     </div>
                 )}
+            </div>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                    <span
+                        className="inline-block w-3 h-0.5 rounded-full bg-[#3b82f6]"
+                        aria-hidden
+                    />
+                    TVL (BCH)
+                </span>
+                <span className="flex items-center gap-1.5">
+                    <span
+                        className="inline-block w-3 h-2 rounded-sm bg-[#64748b]"
+                        aria-hidden
+                    />
+                    Volume (BCH)
+                </span>
             </div>
         </div>
     );

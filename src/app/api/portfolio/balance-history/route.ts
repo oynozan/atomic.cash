@@ -27,15 +27,26 @@ function extractBchVolume(tx: StoredTransaction): number {
     return candidates[0] ?? 0;
 }
 
+const RANGE_MS: Record<string, number> = {
+    "1d": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000,
+    "90d": 90 * 24 * 60 * 60 * 1000,
+};
+
 /**
  * Replay swap txs backwards from current balance to build history.
  * Only swap txs have the amounts we need; other types are skipped.
+ * Query: address (required), range (optional: 1d | 7d | 30d | 90d, default 30d).
  */
 export async function GET(request: NextRequest) {
     const address = request.nextUrl.searchParams.get("address")?.trim();
     if (!address) {
         return NextResponse.json({ error: "Missing address" }, { status: 400 });
     }
+
+    const rangeParam = request.nextUrl.searchParams.get("range") ?? "30d";
+    const rangeMs = RANGE_MS[rangeParam] ?? RANGE_MS["30d"];
 
     try {
         const [balance, allPoolsResult, txColl] = await Promise.all([
@@ -47,8 +58,7 @@ export async function GET(request: NextRequest) {
 
         const now = Date.now();
         const dayMs = 24 * 60 * 60 * 1000;
-        const maxRange = 90 * dayMs;
-        const from = now - maxRange;
+        const from = now - rangeMs;
 
         const txs = await txColl
             .find({

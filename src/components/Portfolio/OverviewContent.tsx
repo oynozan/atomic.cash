@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import PortfolioBalanceChart from "@/components/Portfolio/BalanceChart";
-import SwapThisWeekCard from "@/components/Portfolio/SwapThisWeekCard";
 import {
     usePortfolioBalanceHistoryStore,
     type BalanceHistoryResponse,
@@ -47,12 +46,13 @@ export default function PortfolioOverviewContent() {
     if (!address) return null;
 
     return (
-        <div className="mb-6 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-6">
-            <SwapThisWeekCard
+        <div className="mb-6">
+            <PortfolioBalanceChart
+                address={address}
+                initialData={balanceData}
                 swapsThisWeek={balanceData?.swapsThisWeek ?? 0}
                 swappedThisWeekBch={balanceData?.swappedThisWeekBch ?? 0}
             />
-            <PortfolioBalanceChart address={address} initialData={balanceData} />
         </div>
     );
 }

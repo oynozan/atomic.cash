@@ -21,7 +21,12 @@ type StoredTrade = {
     createdAt: number;
 };
 
-type TradesResponse = { trades: StoredTrade[]; total: number };
+type TradesResponse = {
+    trades: StoredTrade[];
+    total: number;
+    hasMore?: boolean;
+    nextCursor?: number;
+};
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -56,8 +61,11 @@ export default function TokenDetailTradeHistory({
     tokenIconUrl?: string;
     refreshKey?: number;
 }) {
-    const [data, setData] = useState<TradesResponse | null>(null);
+    const [trades, setTrades] = useState<StoredTrade[]>([]);
+    const [total, setTotal] = useState<number | null>(null);
+    const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -71,7 +79,11 @@ export default function TokenDetailTradeHistory({
             )}`;
             try {
                 const json = await fetchJsonOnce<TradesResponse>(url);
-                if (!cancelled) setData(json);
+                if (!cancelled) {
+                    setTrades(json.trades);
+                    setTotal(json.total);
+                    setNextCursor(json.nextCursor);
+                }
             } catch (err) {
                 if (!cancelled) {
                     setError(err instanceof Error ? err.message : "Failed to load trades");
@@ -88,7 +100,20 @@ export default function TokenDetailTradeHistory({
         };
     }, [tokenCategory, refreshKey]);
 
-    const trades = data?.trades ?? [];
+    const loadMore = async () => {
+        if (nextCursor == null || loadingMore) return;
+        setLoadingMore(true);
+        const url = `/api/trades/recent?limit=20&tokenCategory=${encodeURIComponent(
+            tokenCategory,
+        )}&cursor=${nextCursor}`;
+        try {
+            const json = await fetchJsonOnce<TradesResponse>(url);
+            setTrades(prev => [...prev, ...json.trades]);
+            setNextCursor(json.nextCursor);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
 
     return (
         <div className="rounded-[24px] border bg-popover py-4 px-4 flex flex-col gap-3">
@@ -96,13 +121,13 @@ export default function TokenDetailTradeHistory({
                 <div>
                     <div className="text-sm font-semibold text-foreground">Trade history</div>
                     <div className="text-xs text-muted-foreground">
-                        {data?.total ?? trades.length} trade
-                        {(data?.total ?? trades.length) !== 1 ? "s" : ""}
+                        {total ?? trades.length} trade
+                        {(total ?? trades.length) !== 1 ? "s" : ""}
                     </div>
                 </div>
             </div>
 
-            {loading && !data && (
+            {loading && trades.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
             )}
             {error && <div className="py-6 text-center text-sm text-destructive">{error}</div>}
@@ -199,6 +224,18 @@ export default function TokenDetailTradeHistory({
                             );
                         })}
                     </div>
+                    {nextCursor != null && (
+                        <div className="flex justify-center pt-2 pb-1">
+                            <button
+                                type="button"
+                                onClick={loadMore}
+                                disabled={loadingMore}
+                                className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                            >
+                                {loadingMore ? "Loading…" : "Load more"}
+                            </button>
+                        </div>
+                    )}
                 </>
             )}
         </div>

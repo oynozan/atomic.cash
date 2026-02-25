@@ -14,31 +14,50 @@ type TokenMeta = {
 type TradesResponse = {
     trades: StoredTransaction[];
     total: number;
+    hasMore?: boolean;
+    nextCursor?: number;
     tokenMeta?: Record<string, TokenMeta>;
 };
 
 /**
- * GET /api/trades/recent?limit=...&tokenCategory=...
+ * GET /api/trades/recent?limit=...&tokenCategory=...&cursor=...
  *
  * Returns the most recent swap transactions (optionally for one token),
- * sorted by `createdAt` desc.
+ * sorted by `createdAt` desc. cursor = createdAt (ms) for pagination.
  */
 export async function GET(request: NextRequest) {
     const limitParam = request.nextUrl.searchParams.get("limit");
-    const limit = limitParam ? Number.parseInt(limitParam, 10) || 50 : 50;
+    const cursorParam = request.nextUrl.searchParams.get("cursor");
+    const limit = Math.min(
+        Math.max(limitParam ? Number.parseInt(limitParam, 10) || 20 : 20, 1),
+        100,
+    );
+    const cursor = cursorParam ? Number.parseInt(cursorParam, 10) : undefined;
     const tokenCategory = request.nextUrl.searchParams.get("tokenCategory") ?? undefined;
 
     try {
         const coll = await getTransactionsCollection();
 
-        const filter: { type: "swap"; tokenCategory?: string } = { type: "swap" };
+        const filter: { type: "swap"; tokenCategory?: string; createdAt?: { $lt: number } } = {
+            type: "swap",
+        };
         if (tokenCategory) filter.tokenCategory = tokenCategory;
+        if (cursor != null && !Number.isNaN(cursor)) filter.createdAt = { $lt: cursor };
 
-        const trades: StoredTransaction[] = await coll
-            .find(filter)
-            .sort({ createdAt: -1 })
-            .limit(limit)
-            .toArray();
+        const [total, raw] = await Promise.all([
+            coll.countDocuments(
+                tokenCategory ? { type: "swap", tokenCategory } : { type: "swap" },
+            ),
+            coll
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .limit(limit + 1)
+                .toArray(),
+        ]);
+
+        const hasMore = raw.length > limit;
+        const trades = hasMore ? raw.slice(0, limit) : raw;
+        const nextCursor = hasMore && trades.length > 0 ? trades[trades.length - 1].createdAt : undefined;
 
         // Collect lightweight token metadata for all categories present
         const categories = Array.from(
@@ -63,7 +82,8 @@ export async function GET(request: NextRequest) {
 
         const body: TradesResponse = {
             trades,
-            total: trades.length,
+            total,
+            ...(hasMore && nextCursor != null ? { hasMore: true, nextCursor } : {}),
             tokenMeta: Object.keys(tokenMeta).length ? tokenMeta : undefined,
         };
 

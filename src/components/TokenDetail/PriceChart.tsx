@@ -1,10 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+    ColorType,
+    LineSeries,
+    CandlestickSeries,
+    HistogramSeries,
+    createChart,
+    TickMarkType,
+    type CandlestickData,
+    type IChartApi,
+    type ISeriesApi,
+    type LineData,
+    type UTCTimestamp,
+} from "lightweight-charts";
+
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { formatBchPrice } from "@/lib/utils";
 
-type Point = { timestamp: number; priceBch: number };
+type Point = { timestamp: number; priceBch: number; volume?: number };
 
 type PriceHistoryResponse = {
     tokenCategory: string;
@@ -13,10 +27,17 @@ type PriceHistoryResponse = {
 };
 
 const RANGES = [
+    { key: "1h", label: "1H" },
     { key: "24h", label: "1D" },
     { key: "7d", label: "1W" },
     { key: "30d", label: "1M" },
+    { key: "90d", label: "Max" },
 ] as const;
+
+type RangeKey = (typeof RANGES)[number]["key"];
+type ViewMode = "line" | "candles";
+
+const CHART_HEIGHT = 280;
 
 export default function PriceChart({
     tokenCategory,
@@ -27,19 +48,38 @@ export default function PriceChart({
     currentPrice: number | null;
     refreshKey?: number;
 }) {
-    const [range, setRange] = useState<"24h" | "7d" | "30d">("30d");
+    const [range, setRange] = useState<RangeKey>("30d");
+    const [mode, setMode] = useState<ViewMode>("line");
     const [data, setData] = useState<PriceHistoryResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const chartRef = useRef<IChartApi | null>(null);
+    const seriesRef = useRef<ISeriesApi<"Line" | "Candlestick"> | null>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const rangeRef = useRef<RangeKey>(range);
+    rangeRef.current = range;
+    const hasSpot =
+        typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0;
+
+    // Fetch history for selected range
     useEffect(() => {
         let cancelled = false;
 
         const run = async () => {
             setLoading(true);
             setError(null);
-            setData(null);
-            const param = range === "24h" ? "1d" : range === "7d" ? "7d" : "30d";
+            const param =
+                range === "1h"
+                    ? "1h"
+                    : range === "24h"
+                      ? "1d"
+                      : range === "7d"
+                        ? "7d"
+                        : range === "90d"
+                          ? "90d"
+                          : "30d";
             const url = `/api/tokens/${encodeURIComponent(
                 tokenCategory,
             )}/price-history?range=${param}`;
@@ -66,81 +106,319 @@ export default function PriceChart({
         };
     }, [tokenCategory, range, refreshKey]);
 
-    const { path, minPrice, maxPrice, viewBox } = useMemo(() => {
-        const points = data?.points ?? [];
-        const w = 400;
-        const h = 120;
+    // Create chart once
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        if (chartRef.current) return;
 
-        // Hiç trade yoksa (veya tek nokta) ama geçerli bir currentPrice varsa,
-        // düz bir hat çizelim; böylece "ölü" tokenler bile sabit fiyatlı grafik gösterir.
-        if (!points.length || points.length < 2) {
-            const p = currentPrice ?? 0;
-            if (!Number.isFinite(p) || p <= 0) {
-                return {
-                    path: "",
-                    minPrice: 0,
-                    maxPrice: 0,
-                    viewBox: `0 0 ${w} ${h}`,
-                };
+        const textColor = "#94a3b8";
+        const borderColor = "#334155";
+
+        // Crosshair/tooltip: full local time (user timezone)
+        const formatLocalTime = (time: UTCTimestamp) => {
+            const date = new Date((time as number) * 1000);
+            const r = rangeRef.current;
+            const dateStr = date.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+            });
+            const timeStr = date.toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: r === "1h" ? "2-digit" : undefined,
+                hour12: true,
+            });
+            return `${dateStr}, ${timeStr}`;
+        };
+
+        // Footer tick marks: max 8 chars per label (library requirement), local time
+        const tickMarkFormatter = (time: UTCTimestamp, tickMarkType: TickMarkType) => {
+            const date = new Date((time as number) * 1000);
+            switch (tickMarkType) {
+                case TickMarkType.Year:
+                    return date.getFullYear().toString().slice(-2); // "26"
+                case TickMarkType.Month:
+                    return date.toLocaleDateString(undefined, { month: "short" }).slice(0, 3); // "Feb"
+                case TickMarkType.DayOfMonth:
+                    return date.getDate().toString(); // "26"
+                case TickMarkType.Time:
+                    return date.toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                    }); // "2:14 PM" -> 7 chars
+                case TickMarkType.TimeWithSeconds:
+                    return date.toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: true,
+                    }); // "2:14:00" style
+                default:
+                    return date.toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                    });
             }
+        };
 
-            const spanP = Math.abs(p) * 0.1 || 1e-8;
-            const loP = Math.max(0, p - spanP);
-            const hiP = p + spanP;
-            const rangeP = hiP - loP || 1e-12;
-            const y = h - ((p - loP) / rangeP) * h;
-            const d = `M 0 ${y} L ${w} ${y}`;
+        const chart = createChart(container, {
+            width: container.clientWidth || 400,
+            height: CHART_HEIGHT,
+            layout: {
+                background: { type: ColorType.Solid, color: "transparent" },
+                textColor,
+            },
+            grid: {
+                vertLines: { color: borderColor },
+                horzLines: { color: borderColor },
+            },
+            rightPriceScale: {
+                borderColor,
+                textColor,
+                borderVisible: true,
+                scaleMargins: { top: 0.1, bottom: 0.4 },
+                ticksVisible: true,
+                ensureEdgeTickMarksVisible: true,
+                visible: true,
+                minimumWidth: 80,
+            },
+            timeScale: {
+                borderColor,
+                timeVisible: true,
+                secondsVisible: false,
+                rightOffset: 0,
+                tickMarkFormatter,
+            },
+            crosshair: { mode: 0 },
+            handleScroll: {
+                mouseWheel: true,
+                pressedMouseMove: true,
+                horzTouchDrag: true,
+                vertTouchDrag: false,
+            },
+            handleScale: {
+                axisPressedMouseMove: true,
+                mouseWheel: true,
+                pinch: false,
+            },
+            localization: {
+                timeFormatter: formatLocalTime,
+            },
+        });
 
-            return {
-                path: d,
-                minPrice: loP,
-                maxPrice: hiP,
-                viewBox: `0 0 ${w} ${h}`,
-            };
+        chartRef.current = chart;
+
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+            priceFormat: { type: "volume" },
+            priceScaleId: "",
+        });
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: { top: 0.7, bottom: 0 },
+        });
+        volumeSeriesRef.current = volumeSeries;
+
+        const ro = new ResizeObserver(entries => {
+            for (const e of entries) {
+                if (e.target === container) {
+                    const { width, height } = e.contentRect;
+                    chart.applyOptions({
+                        width,
+                        height: height || CHART_HEIGHT,
+                    });
+                }
+            }
+        });
+        ro.observe(container);
+
+        return () => {
+            ro.disconnect();
+            volumeSeriesRef.current = null;
+            chart.remove();
+            chartRef.current = null;
+            seriesRef.current = null;
+        };
+    }, []);
+
+    // Ensure correct series for current mode
+    useEffect(() => {
+        const chart = chartRef.current;
+        if (!chart) return;
+
+        if (seriesRef.current) {
+            chart.removeSeries(seriesRef.current);
+            seriesRef.current = null;
         }
 
-        // Son nokta olarak güncel spot fiyatı ekle: çizgi son swap'ın execution fiyatında
-        // (küçük işlemde düşük kalabilir) değil, piyasa fiyatında biter.
-        const now = Date.now();
-        const withNow =
-            typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0
-                ? [...points, { timestamp: now, priceBch: currentPrice }]
-                : points;
-
-        const minT = Math.min(...withNow.map(x => x.timestamp));
-        const maxT = Math.max(...withNow.map(x => x.timestamp));
-        const minP = Math.min(...withNow.map(x => x.priceBch));
-        const maxP = Math.max(...withNow.map(x => x.priceBch));
-        const spanT = maxT - minT || 1;
-
-        // Keep price axis strictly positive and with sensible range
-        const baseMin = Math.min(minP, currentPrice ?? minP);
-        const baseMax = Math.max(maxP, currentPrice ?? maxP);
-        const spanP = baseMax - baseMin;
-        const padP = spanP > 0 ? spanP * 0.05 : (baseMin || 1) * 0.1;
-        const loP = Math.max(0, baseMin - padP);
-        const hiP = baseMax + padP;
-        const rangeP = hiP - loP || 1e-12;
-
-        const d = withNow
-            .map(
-                (pt, i) =>
-                    `${i === 0 ? "M" : "L"} ${((pt.timestamp - minT) / spanT) * w} ${h - ((pt.priceBch - loP) / rangeP) * h}`,
-            )
-            .join(" ");
-
-        return {
-            path: d,
-            minPrice: loP,
-            maxPrice: hiP,
-            viewBox: `0 0 ${w} ${h}`,
+        const priceScaleOpts = {
+            borderColor: "#334155",
+            textColor: "#94a3b8",
+            borderVisible: true,
+            scaleMargins: { top: 0.1, bottom: 0.4 },
+            ticksVisible: true,
+            ensureEdgeTickMarksVisible: true,
+            visible: true,
+            minimumWidth: 80,
         };
-    }, [data?.points, currentPrice]);
+
+        if (mode === "line") {
+            const series = chart.addSeries(LineSeries, {
+                color: "#22c55e",
+                lineWidth: 2,
+                priceScaleId: "right",
+                priceFormat: { type: "custom", formatter: (p: number) => formatBchPrice(p) },
+            });
+            chart.priceScale("right").applyOptions(priceScaleOpts);
+            seriesRef.current = series;
+        } else {
+            const series = chart.addSeries(CandlestickSeries, {
+                upColor: "#22c55e",
+                downColor: "#ef4444",
+                wickUpColor: "#22c55e",
+                wickDownColor: "#ef4444",
+                borderVisible: false,
+                priceScaleId: "right",
+                priceFormat: {
+                    type: "custom",
+                    formatter: (p: number) => formatBchPrice(p),
+                },
+                lastValueVisible: true,
+            });
+            chart.priceScale("right").applyOptions(priceScaleOpts);
+            seriesRef.current = series;
+        }
+    }, [mode]);
+
+    // Push data into series when history or mode changes
+    useEffect(() => {
+        const chart = chartRef.current;
+        const series = seriesRef.current;
+        if (!chart || !series) return;
+
+        const points = data?.points ?? [];
+
+        if (mode === "line") {
+            let lineData: LineData[] = points.map(p => ({
+                time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
+                value: p.priceBch,
+            }));
+
+            if (hasSpot) {
+                const nowSec = Math.floor(Date.now() / 1000) as UTCTimestamp;
+                lineData = [...lineData, { time: nowSec, value: currentPrice as number }];
+            }
+
+            (series as ISeriesApi<"Line">).setData(lineData);
+        } else {
+            const candles: CandlestickData[] = [];
+
+            if (points.length === 0) {
+                if (hasSpot) {
+                    const t = Math.floor(Date.now() / 1000) as UTCTimestamp;
+                    const v = currentPrice as number;
+                    candles.push({ time: t, open: v, high: v, low: v, close: v });
+                }
+            } else {
+                let prevClose = points[0]!.priceBch;
+                const prevTime = Math.floor(points[0]!.timestamp / 1000) as UTCTimestamp;
+                candles.push({
+                    time: prevTime,
+                    open: prevClose,
+                    high: prevClose,
+                    low: prevClose,
+                    close: prevClose,
+                });
+
+                for (let i = 1; i < points.length; i++) {
+                    const p = points[i]!;
+                    const t = Math.floor(p.timestamp / 1000) as UTCTimestamp;
+                    const open = prevClose;
+                    const close = p.priceBch;
+                    const high = Math.max(open, close);
+                    const low = Math.min(open, close);
+                    candles.push({ time: t, open, high, low, close });
+                    prevClose = close;
+                }
+
+                if (hasSpot) {
+                    const t = Math.floor(Date.now() / 1000) as UTCTimestamp;
+                    const open = prevClose;
+                    const close = currentPrice as number;
+                    const high = Math.max(open, close);
+                    const low = Math.min(open, close);
+                    candles.push({ time: t, open, high, low, close });
+                }
+            }
+
+            (series as ISeriesApi<"Candlestick">).setData(candles);
+        }
+
+        const volumeSeries = volumeSeriesRef.current;
+        if (volumeSeries) {
+            let prevPrice: number | null = null;
+            const volumeData = points.map(p => {
+                const isUp = prevPrice === null || p.priceBch >= prevPrice;
+                prevPrice = p.priceBch;
+                return {
+                    time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
+                    value: typeof p.volume === "number" && p.volume > 0 ? p.volume : 0,
+                    color: isUp ? "#22c55e" : "#ef4444",
+                };
+            });
+            volumeSeries.setData(volumeData.length > 0 ? volumeData : []);
+        }
+
+        if (points.length > 0 || hasSpot) {
+            chart.timeScale().fitContent();
+        }
+
+        chart.priceScale("right").applyOptions({
+            visible: true,
+            borderVisible: true,
+            ticksVisible: true,
+            ensureEdgeTickMarksVisible: true,
+            minimumWidth: 80,
+            textColor: "#94a3b8",
+            borderColor: "#334155",
+            scaleMargins: { top: 0.1, bottom: 0.4 },
+        });
+    }, [data?.points, currentPrice, hasSpot, mode]);
+
+    const isLoading = loading && !data;
+    const hasAnyData = !!(data && (data.points.length > 0 || hasSpot));
 
     return (
         <div className="rounded-[24px] border bg-popover p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-foreground">Price</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-foreground">Price</h2>
+                    <div className="inline-flex items-center gap-0.5 rounded-full border bg-muted/30 px-1 py-0.5 text-[11px]">
+                        <button
+                            type="button"
+                            onClick={() => setMode("line")}
+                            className={`rounded-full px-2 py-0.5 font-medium transition-colors ${
+                                mode === "line"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            Simple
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMode("candles")}
+                            className={`rounded-full px-2 py-0.5 font-medium transition-colors ${
+                                mode === "candles"
+                                    ? "bg-emerald-500 text-emerald-950"
+                                    : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            Bars
+                        </button>
+                    </div>
+                </div>
                 <div className="flex gap-1">
                     {RANGES.map(r => (
                         <button
@@ -159,59 +437,26 @@ export default function PriceChart({
                     ))}
                 </div>
             </div>
-            {error && <div className="py-6 text-center text-sm text-destructive">{error}</div>}
-            {loading || !data ? (
-                <div className="h-[120px] flex items-center justify-center text-muted-foreground text-sm">
-                    Loading…
-                </div>
-            ) : (
-                <div className="flex gap-4">
-                    <div className="flex flex-col justify-between text-[11px] text-muted-foreground">
-                        <span>{formatBchPrice(maxPrice)}</span>
-                        <span>{formatBchPrice(minPrice)}</span>
+            {error && <div className="py-2 text-center text-sm text-destructive">{error}</div>}
+            <div
+                ref={containerRef}
+                className="relative w-full max-w-full rounded-xl border border-border/60 bg-background/30 overflow-hidden"
+                style={{
+                    height: CHART_HEIGHT,
+                }}
+            >
+                {isLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm bg-background/40">
+                        Loading…
                     </div>
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                        {path ? (
-                            <svg
-                                viewBox={viewBox}
-                                className="w-full h-[120px] text-primary"
-                                preserveAspectRatio="none"
-                            >
-                                <defs>
-                                    <linearGradient id="chartGradient" x1="0" y1="1" x2="0" y2="0">
-                                        <stop
-                                            offset="0%"
-                                            stopColor="currentColor"
-                                            stopOpacity="0.15"
-                                        />
-                                        <stop
-                                            offset="100%"
-                                            stopColor="currentColor"
-                                            stopOpacity="0"
-                                        />
-                                    </linearGradient>
-                                </defs>
-                                <path
-                                    d={path + (path ? ` L 400 120 L 0 120 Z` : "")}
-                                    fill="url(#chartGradient)"
-                                />
-                                <path
-                                    d={path}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                />
-                            </svg>
-                        ) : (
-                            <div className="h-[120px] flex items-center justify-center text-muted-foreground text-xs">
-                                No price data for this period
-                            </div>
-                        )}
+                )}
+                {!isLoading && !hasAnyData && (
+                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs bg-background/40">
+                        No price data for this period
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
+

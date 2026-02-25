@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
     ArrowRightLeft,
     ExternalLink,
@@ -12,43 +12,10 @@ import {
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import ConnectWallet from "@/components/Header/Connect";
 import { getExplorerUrl } from "@/dapp/explorer";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
-
-type DappTxItem = {
-    txid: string;
-    address: string;
-    type: "swap" | "create_pool" | "add_liquidity" | "remove_liquidity";
-    direction?: "bch_to_token" | "token_to_bch";
-    tokenCategory?: string;
-    amounts?: {
-        bchIn?: number;
-        bchOut?: number;
-        tokenIn?: number;
-        tokenOut?: number;
-    };
-    createdAt: number;
-};
-
-type HistoryResponse = {
-    dapp: {
-        transactions: DappTxItem[];
-        total: number;
-        hasMore: boolean;
-        nextCursor?: number;
-    };
-    tokenMeta?: Record<string, TokenMeta>;
-};
-
-type TokenMeta = {
-    symbol: string;
-    name?: string;
-    iconUrl?: string;
-};
-
-// Simple module-level cache to avoid refetching history
-// every time the user switches between Tokens/Activity tabs
-// during the same session.
-const historyCache: Record<string, HistoryResponse> = {};
+import {
+    usePortfolioActivityStore,
+    type TokenMeta,
+} from "@/store/portfolioActivity";
 
 function formatDate(timestamp: number): string {
     const d = new Date(timestamp);
@@ -58,86 +25,36 @@ function formatDate(timestamp: number): string {
     });
 }
 
-const INITIAL_PAGE_SIZE = 20;
-
 export default function PortfolioActivityFull() {
     const { address, isConnected } = useWalletSession();
-    const [transactions, setTransactions] = useState<DappTxItem[]>([]);
-    const [tokenMeta, setTokenMeta] = useState<Record<string, TokenMeta>>({});
-    const [hasMore, setHasMore] = useState(false);
-    const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
-    const [loading, setLoading] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const buildUrl = (cursor?: number) => {
-        const params = new URLSearchParams();
-        params.set("address", address ?? "");
-        params.set("limit", String(INITIAL_PAGE_SIZE));
-        if (cursor != null) params.set("cursor", String(cursor));
-        return `/api/portfolio/history?${params.toString()}`;
-    };
+    const entry =
+        usePortfolioActivityStore(
+            s => (address ? s.byAddress[address] : undefined) ?? null,
+        ) ?? {
+            data: null,
+            loading: false,
+            loadingMore: false,
+            error: null,
+        };
+    const fetchInitial = usePortfolioActivityStore(s => s.fetchInitial);
+    const fetchMore = usePortfolioActivityStore(s => s.fetchMore);
 
     useEffect(() => {
         if (!address?.trim()) return;
-        let cancelled = false;
+        void fetchInitial(address);
+    }, [address, fetchInitial]);
 
-        const run = async () => {
-            const cached = historyCache[address!];
-            if (cached && !cancelled) {
-                setTransactions(cached.dapp.transactions);
-                setTokenMeta(cached.tokenMeta ?? {});
-                setHasMore(cached.dapp.hasMore ?? false);
-                setNextCursor(cached.dapp.nextCursor);
-                setLoading(false);
-                setError(null);
-                return;
-            }
-
-            setLoading(true);
-            setError(null);
-            try {
-                const json = await fetchJsonOnce<HistoryResponse>(buildUrl());
-                if (!cancelled) {
-                    setTransactions(json.dapp.transactions);
-                    setTokenMeta(json.tokenMeta ?? {});
-                    setHasMore(json.dapp.hasMore ?? false);
-                    setNextCursor(json.dapp.nextCursor);
-                    historyCache[address!] = json;
-                }
-            } catch (err) {
-                if (!cancelled) {
-                    setError(err instanceof Error ? err.message : "Failed to load activity");
-                }
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-
-        void run();
-        return () => {
-            cancelled = true;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [address]);
+    const dappTxs = entry.data?.dapp.transactions ?? [];
+    const tokenMeta = (entry.data?.tokenMeta ?? {}) as Record<string, TokenMeta>;
+    const hasMore = entry.data?.dapp.hasMore ?? false;
+    const loading = entry.loading;
+    const loadingMore = entry.loadingMore;
+    const error = entry.error;
 
     const loadMore = async () => {
-        if (!address?.trim() || nextCursor == null || loadingMore || !hasMore) return;
-        setLoadingMore(true);
-        try {
-            const json = await fetchJsonOnce<HistoryResponse>(buildUrl(nextCursor));
-            setTransactions(prev => [...prev, ...json.dapp.transactions]);
-            setTokenMeta(prev => ({ ...prev, ...(json.tokenMeta ?? {}) }));
-            setHasMore(json.dapp.hasMore ?? false);
-            setNextCursor(json.dapp.nextCursor);
-        } catch {
-            // Keep current state on error
-        } finally {
-            setLoadingMore(false);
-        }
+        if (!address?.trim() || !hasMore || loadingMore) return;
+        await fetchMore(address);
     };
-
-    const dappTxs = transactions;
 
     if (!isConnected || !address) {
         return (

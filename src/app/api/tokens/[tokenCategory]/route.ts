@@ -47,6 +47,48 @@ function extractInitialPrice(tx: StoredTransaction): number | null {
     return null;
 }
 
+function extractTradePrice(tx: StoredTransaction): number | null {
+    const a = tx.amounts;
+    if (!a) return null;
+    if (
+        tx.direction === "bch_to_token" &&
+        typeof a.bchIn === "number" &&
+        typeof a.tokenOut === "number" &&
+        a.bchIn > 0 &&
+        a.tokenOut > 0
+    ) {
+        return a.bchIn / a.tokenOut;
+    }
+    if (
+        tx.direction === "token_to_bch" &&
+        typeof a.bchOut === "number" &&
+        typeof a.tokenIn === "number" &&
+        a.bchOut > 0 &&
+        a.tokenIn > 0
+    ) {
+        return a.bchOut / a.tokenIn;
+    }
+    return null;
+}
+
+function baselinePriceSince(
+    points: { timestamp: number; priceBch: number }[],
+    since: number,
+): number | null {
+    if (!points.length) return null;
+    let candidate: number | null = null;
+    for (const p of points) {
+        if (p.timestamp <= since) {
+            candidate = p.priceBch;
+        } else {
+            break;
+        }
+    }
+    if (candidate != null) return candidate;
+    const after = points.find(p => p.timestamp > since);
+    return after?.priceBch ?? null;
+}
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ tokenCategory: string }> },
@@ -106,15 +148,22 @@ export async function GET(
         let volume30dBch = 0;
         let prev30dBch = 0;
 
+        const pricePoints: { timestamp: number; priceBch: number }[] = [];
+
         for (const tx of recentSwaps) {
             const volumeBch = extractBchVolume(tx);
-            if (!volumeBch) continue;
+            if (volumeBch) {
+                if (tx.createdAt >= last24Start) volume24hBch += volumeBch;
+                else if (tx.createdAt >= prev24Start) prev24hBch += volumeBch;
 
-            if (tx.createdAt >= last24Start) volume24hBch += volumeBch;
-            else if (tx.createdAt >= prev24Start) prev24hBch += volumeBch;
+                if (tx.createdAt >= last30Start) volume30dBch += volumeBch;
+                else if (tx.createdAt >= prev30Start) prev30dBch += volumeBch;
+            }
 
-            if (tx.createdAt >= last30Start) volume30dBch += volumeBch;
-            else if (tx.createdAt >= prev30Start) prev30dBch += volumeBch;
+            const tradePrice = extractTradePrice(tx);
+            if (tradePrice != null && Number.isFinite(tradePrice)) {
+                pricePoints.push({ timestamp: tx.createdAt, priceBch: tradePrice });
+            }
         }
 
         // Initial price from earliest create_pool for this token (same as tokens overview)
@@ -132,17 +181,39 @@ export async function GET(
             const p0 = extractInitialPrice(initialTx[0]!);
             if (p0 != null && Number.isFinite(p0) && p0 > 0) {
                 initialPrice = p0;
+                pricePoints.push({
+                    timestamp: initialTx[0]!.createdAt,
+                    priceBch: p0,
+                });
             }
         }
+
+        pricePoints.sort((a, b) => a.timestamp - b.timestamp);
 
         const changeSinceLaunch =
             priceBch != null && initialPrice != null && initialPrice !== 0
                 ? ((priceBch - initialPrice) / Math.abs(initialPrice)) * 100
                 : null;
 
-        // For now 1d and 7d both reflect change since pool creation.
-        const change1dPercent = changeSinceLaunch;
-        const change7dPercent = changeSinceLaunch;
+        let change1dPercent: number | null = null;
+        let change7dPercent: number | null = null;
+
+        if (priceBch != null && Number.isFinite(priceBch) && priceBch !== 0) {
+            const price1dBase = baselinePriceSince(pricePoints, last24Start);
+            const price7dBase = baselinePriceSince(pricePoints, now - 7 * dayMs);
+
+            if (price1dBase != null && price1dBase !== 0) {
+                change1dPercent = ((priceBch - price1dBase) / Math.abs(price1dBase)) * 100;
+            } else {
+                change1dPercent = changeSinceLaunch;
+            }
+
+            if (price7dBase != null && price7dBase !== 0) {
+                change7dPercent = ((priceBch - price7dBase) / Math.abs(price7dBase)) * 100;
+            } else {
+                change7dPercent = changeSinceLaunch;
+            }
+        }
 
         const body: TokenDetailResponse = {
             tokenCategory,
