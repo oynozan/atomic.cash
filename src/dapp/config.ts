@@ -16,7 +16,8 @@ export const ELECTRUM_ENDPOINTS: { host: string }[] =
             { host: 'bitcoincash.network' },
           ]
         : [
-            // chipnet.bch.ninja public Electrum (default used by CashScript examples)
+            // Prefer imaginary.cash when chipnet.bch.ninja is down
+            { host: 'chipnet.imaginary.cash' },
             { host: 'chipnet.bch.ninja' },
           ];
 
