@@ -11,6 +11,7 @@ import { signWcTransaction } from "@/lib/web3";
 import { formatError } from "@/lib/utils";
 import { toast } from "sonner";
 import type { SessionTypes } from "@walletconnect/types";
+import type UniversalProvider from "@walletconnect/universal-provider";
 
 type PoolSummary = {
   poolAddress: string;
@@ -74,6 +75,7 @@ type AddLiquidityContentProps = {
   pool: PoolSummary;
   address: string;
   session: SessionTypes.Struct;
+  provider: UniversalProvider | null;
   addAmount: string;
   setAddAmount: (v: string) => void;
   addMode: "bch" | "token";
@@ -87,6 +89,7 @@ function AddLiquidityContent({
   pool,
   address,
   session,
+  provider,
   addAmount,
   setAddAmount,
   addMode,
@@ -212,6 +215,7 @@ function AddLiquidityContent({
             addAmount,
             addMode,
             session,
+            provider,
             setTxLoading,
             onDone,
           )
@@ -227,6 +231,7 @@ type RemoveLiquidityContentProps = {
   pool: PoolSummary;
   address: string;
   session: SessionTypes.Struct;
+  provider: UniversalProvider | null;
   removePercentage: string;
   setRemovePercentage: (v: string) => void;
   removeAll: boolean;
@@ -240,6 +245,7 @@ function RemoveLiquidityContent({
   pool,
   address,
   session,
+  provider,
   removePercentage,
   setRemovePercentage,
   removeAll,
@@ -328,6 +334,7 @@ function RemoveLiquidityContent({
             removePercentage,
             removeAll,
             session,
+            provider,
             setTxLoading,
             onDone,
           )
@@ -344,7 +351,8 @@ async function handleAddLiquidity(
   address: string,
   amount: string,
   mode: "bch" | "token",
-  session: SessionTypes.Struct,
+  _session: SessionTypes.Struct,
+  provider: UniversalProvider | null,
   setTxLoading: (v: boolean) => void,
   onDone: () => void,
 ) {
@@ -373,7 +381,7 @@ async function handleAddLiquidity(
 
     toast.info("Transaction prepared. Please confirm it in your wallet.");
     const wcObj = JSON.parse(data.wcTransactionJson);
-    const signResult = await signWcTransaction(wcObj, session);
+    const signResult = await signWcTransaction(wcObj, provider);
     if (!signResult?.signedTransaction) {
       toast.error("Transaction signing failed or was rejected.");
       return;
@@ -425,7 +433,8 @@ async function handleRemoveLiquidity(
   address: string,
   percentage: string,
   withdrawAll: boolean,
-  session: SessionTypes.Struct,
+  _session: SessionTypes.Struct,
+  provider: UniversalProvider | null,
   setTxLoading: (v: boolean) => void,
   onDone: () => void,
 ) {
@@ -464,7 +473,7 @@ async function handleRemoveLiquidity(
 
     toast.info("Transaction prepared. Please confirm it in your wallet.");
     const wcObj = JSON.parse(data.wcTransactionJson);
-    const signResult = await signWcTransaction(wcObj, session);
+    const signResult = await signWcTransaction(wcObj, provider);
     if (!signResult?.signedTransaction) {
       toast.error("Transaction signing failed or was rejected.");
       return;
@@ -531,7 +540,7 @@ function TokenAvatar({ symbol, iconUrl }: { symbol: string; iconUrl?: string }) 
 /* eslint-enable @next/next/no-img-element */
 
 export default function ManagePoolsPage() {
-  const { address, isConnected, session } = useWalletSession();
+  const { address, isConnected, session, provider } = useWalletSession();
   const [data, setData] = useState<UserPoolsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -806,6 +815,7 @@ export default function ManagePoolsPage() {
               pool={activeModal.pool}
               address={address}
               session={session}
+              provider={provider}
               addAmount={addAmount}
               setAddAmount={setAddAmount}
               addMode={addMode}
@@ -822,6 +832,7 @@ export default function ManagePoolsPage() {
               pool={activeModal.pool}
               address={address}
               session={session}
+              provider={provider}
               removePercentage={removePercentage}
               setRemovePercentage={setRemovePercentage}
               removeAll={removeAll}

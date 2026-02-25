@@ -1,7 +1,6 @@
 "use client";
 
 import { createAppKit } from "@reown/appkit/core";
-import SignClient from "@walletconnect/sign-client";
 import UniversalProvider from "@walletconnect/universal-provider";
 import type { SessionTypes } from "@walletconnect/types";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -58,11 +57,6 @@ export const wcMetadata = {
 };
 const ADDRESS_STORAGE_KEY = "atomic.cash:bchAddress";
 export const networks = [bchMainnet, bchChipnet] as const;
-export const signClient = await SignClient.init({
-    projectId,
-    relayUrl: "wss://relay.walletconnect.com",
-    metadata: wcMetadata,
-});
 const BCH_NAMESPACE = "bch";
 const BCH_METHODS = ["bch_getAddresses", "bch_signTransaction", "bch_signMessage"] as const;
 const BCH_EVENTS = ["addressesChanged"] as const;
@@ -255,8 +249,10 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
         };
 
         const handleDisconnect = () => {
-            setAddress(null);
-            setSession(null);
+            if (typeof window !== "undefined") {
+                window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
+                window.location.reload();
+            }
         };
 
         provider.on("accountsChanged", handleAccountsChanged);

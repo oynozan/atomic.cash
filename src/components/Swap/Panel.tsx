@@ -165,7 +165,7 @@ function TokenSelectModal({
 }
 
 export default function SwapPanel() {
-    const { address, isConnected, session } = useWalletSession();
+    const { address, isConnected, session, provider } = useWalletSession();
     const searchParams = useSearchParams();
     const pathname = usePathname();
 
@@ -417,7 +417,7 @@ export default function SwapPanel() {
             toast.success("Swap transaction is ready. Please confirm in your wallet.");
 
             const { signWcTransaction } = await import("@/lib/web3");
-            const signResult = await signWcTransaction(wcObj, session);
+            const signResult = await signWcTransaction(wcObj, provider);
             if (!signResult?.signedTransaction) {
                 throw new Error("Transaction signing failed or was rejected.");
             }

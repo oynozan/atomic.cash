@@ -59,7 +59,7 @@ function TokenIcon({ iconUrl, symbol }: { iconUrl?: string | null; symbol: strin
 
 export default function CreatePoolPage() {
   const router = useRouter();
-  const { address, session, isConnected } = useWalletSession();
+  const { address, session, provider, isConnected } = useWalletSession();
   const [loading, setLoading] = useState(false);
   const [balances, setBalances] = useState<BalancesResponse | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
@@ -233,7 +233,7 @@ export default function CreatePoolPage() {
       toast.info("Transaction prepared. Please confirm it in your wallet.");
 
       const wcObj = JSON.parse(data.wcTransactionJson);
-      const signResult = await signWcTransaction(wcObj, session);
+      const signResult = await signWcTransaction(wcObj, provider);
       if (!signResult?.signedTransaction) {
         toast.error("Transaction signing failed or was rejected.");
         return;

@@ -53,7 +53,7 @@ function TokenIcon({ iconUrl, symbol }: { iconUrl?: string | null; symbol: strin
 /* eslint-enable @next/next/no-img-element */
 
 export default function PortfolioActions() {
-  const { address, isConnected, session } = useWalletSession();
+  const { address, isConnected, session, provider } = useWalletSession();
   const fetchBalances = usePortfolioBalancesStore((s) => s.fetch);
   const byAddress = usePortfolioBalancesStore((s) => s.byAddress);
   const loadingByAddress = usePortfolioBalancesStore((s) => s.loading);
@@ -237,7 +237,7 @@ export default function PortfolioActions() {
       const wcObj = JSON.parse(data.wcTransactionJson);
       const { signWcTransaction } = await import("@/lib/web3");
       toast.info("Transaction prepared. Please confirm it in your wallet.");
-      const signResult = await signWcTransaction(wcObj, session);
+      const signResult = await signWcTransaction(wcObj, provider);
       if (!signResult?.signedTransaction) {
         throw new Error("Transaction signing failed or was rejected.");
       }
