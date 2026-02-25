@@ -9,25 +9,10 @@ import ConnectWallet from "@/components/Header/Connect";
 import { Button } from "@/components/ui/button";
 import { signWcTransaction } from "@/lib/web3";
 import { formatError } from "@/lib/utils";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { toast } from "sonner";
 import type { SessionTypes } from "@walletconnect/types";
 import type UniversalProvider from "@walletconnect/universal-provider";
-
-type PoolSummary = {
-    poolAddress: string;
-    poolOwnerPkhHex: string;
-    tokenCategory: string;
-    tokenSymbol?: string;
-    tokenIconUrl?: string;
-    bchReserve: number;
-    tokenReserve: number;
-    tokenPriceInBch: number;
-};
-
-type UserPoolsResponse = {
-    pools: PoolSummary[];
-};
+import { useUserPoolsStore, type UserPoolSummary } from "@/store/userPools";
 
 function formatNumber(n: number, maxDecimals = 4): string {
     if (!Number.isFinite(n)) return "-";
@@ -73,7 +58,7 @@ function Modal({
 }
 
 type AddLiquidityContentProps = {
-    pool: PoolSummary;
+    pool: UserPoolSummary;
     address: string;
     session: SessionTypes.Struct;
     provider: UniversalProvider | null;
@@ -235,7 +220,7 @@ function AddLiquidityContent({
 }
 
 type RemoveLiquidityContentProps = {
-    pool: PoolSummary;
+    pool: UserPoolSummary;
     address: string;
     session: SessionTypes.Struct;
     provider: UniversalProvider | null;
@@ -358,7 +343,7 @@ function RemoveLiquidityContent({
 }
 
 async function handleAddLiquidity(
-    pool: PoolSummary,
+    pool: UserPoolSummary,
     address: string,
     amount: string,
     mode: "bch" | "token",
@@ -440,7 +425,7 @@ async function handleAddLiquidity(
 }
 
 async function handleRemoveLiquidity(
-    pool: PoolSummary,
+    pool: UserPoolSummary,
     address: string,
     percentage: string,
     withdrawAll: boolean,
@@ -552,13 +537,14 @@ function TokenAvatar({ symbol, iconUrl }: { symbol: string; iconUrl?: string }) 
 
 export default function ManagePoolsPage() {
     const { address, isConnected, session, provider } = useWalletSession();
-    const [data, setData] = useState<UserPoolsResponse | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshKey, setRefreshKey] = useState(0);
+    const fetchUserPools = useUserPoolsStore(s => s.fetch);
+    const byAddress = useUserPoolsStore(s => s.byAddress);
+    const loadingByAddress = useUserPoolsStore(s => s.loading);
+    const errorByAddress = useUserPoolsStore(s => s.error);
 
     const [activeModal, setActiveModal] = useState<{
         type: "add" | "remove";
-        pool: PoolSummary;
+        pool: UserPoolSummary;
     } | null>(null);
     const [addAmount, setAddAmount] = useState("");
     const [addMode, setAddMode] = useState<"bch" | "token">("bch");
@@ -566,27 +552,14 @@ export default function ManagePoolsPage() {
     const [removeAll, setRemoveAll] = useState(false);
     const [txLoading, setTxLoading] = useState(false);
 
+    const data = address ? byAddress[address]?.data ?? null : null;
+    const loading = address ? loadingByAddress[address] ?? false : false;
+    const error = address ? errorByAddress[address] ?? null : null;
+
     useEffect(() => {
         if (!isConnected || !address) return;
-        let cancelled = false;
-
-        const run = async () => {
-            const url = `/api/user/pools?address=${encodeURIComponent(address)}`;
-            try {
-                const json = await fetchJsonOnce<UserPoolsResponse>(url);
-                if (!cancelled) setData(json);
-            } catch (err) {
-                if (!cancelled) {
-                    setError(err instanceof Error ? err.message : "Failed to load your pools");
-                }
-            }
-        };
-
-        void run();
-        return () => {
-            cancelled = true;
-        };
-    }, [address, isConnected, refreshKey]);
+        void fetchUserPools(address);
+    }, [address, isConnected, fetchUserPools]);
 
     const grouped = useMemo(() => {
         if (!data) return [];
@@ -598,7 +571,7 @@ export default function ManagePoolsPage() {
                 tokenIconUrl?: string;
                 totalBch: number;
                 totalToken: number;
-                pools: PoolSummary[];
+                pools: UserPoolSummary[];
             }
         >();
 
@@ -645,7 +618,7 @@ export default function ManagePoolsPage() {
         );
     }
 
-    const isInitialLoading = !data && !error;
+    const isInitialLoading = loading && !data && !error;
 
     if (isInitialLoading) {
         return (
@@ -854,7 +827,9 @@ export default function ManagePoolsPage() {
                             setTxLoading={setTxLoading}
                             onDone={() => {
                                 setActiveModal(null);
-                                setRefreshKey(k => k + 1);
+                                if (address) {
+                                    void fetchUserPools(address, true);
+                                }
                             }}
                         />
                     ) : (
@@ -871,7 +846,9 @@ export default function ManagePoolsPage() {
                             setTxLoading={setTxLoading}
                             onDone={() => {
                                 setActiveModal(null);
-                                setRefreshKey(k => k + 1);
+                                if (address) {
+                                    void fetchUserPools(address, true);
+                                }
                             }}
                         />
                     )}

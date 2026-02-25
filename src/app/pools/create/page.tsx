@@ -22,6 +22,7 @@ import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { usePoolsStore } from "@/store/pools";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
+import { useUserPoolsStore } from "@/store/userPools";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 
 type TokenItem = {
@@ -64,6 +65,7 @@ export default function CreatePoolPage() {
 
     const fetchBalances = usePortfolioBalancesStore(s => s.fetch);
     const byAddress = usePortfolioBalancesStore(s => s.byAddress);
+    const invalidateUserPools = useUserPoolsStore(s => s.invalidate);
 
     const balances = address ? (byAddress[address]?.data ?? null) : null;
 
@@ -286,6 +288,9 @@ export default function CreatePoolPage() {
             toast.success("Pool created successfully!");
             usePoolsStore.getState().invalidate();
             useTokensOverviewStore.getState().invalidate();
+            if (address) {
+                invalidateUserPools(address);
+            }
             router.push("/pools");
         } catch (err) {
             toast.error(formatError(err));
