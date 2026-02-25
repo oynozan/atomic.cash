@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
-const VOLUME_TTL_MS = 90_000; // 90 seconds
+const VOLUME_TTL_MS = 30_000; // 30 seconds – backend cache will handle heavy aggregation
+const VOLUME_AUTO_REFRESH_MS = 30_000;
+let volumeAutoRefreshStarted = false;
 
 export type VolumeResponse = {
   volume24hBch: number;
@@ -38,6 +40,17 @@ export const useVolumeStore = create<VolumeState>((set, get) => ({
       }
       const json: VolumeResponse = await res.json();
       set({ data: json, error: null, fetchedAt: Date.now() });
+
+      if (!volumeAutoRefreshStarted && typeof window !== "undefined") {
+        volumeAutoRefreshStarted = true;
+        window.setInterval(() => {
+          const state = get();
+          const { fetchedAt: fa } = state;
+          if (!fa || Date.now() - fa >= VOLUME_TTL_MS) {
+            void state.fetch(false);
+          }
+        }, VOLUME_AUTO_REFRESH_MS);
+      }
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load volume stats",

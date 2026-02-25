@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { usePoolsStore } from "@/store/pools";
 import { useTokenPriceStore } from "@/store/tokenPrice";
+import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 
 type Direction = "bch_to_token" | "token_to_bch";
 
@@ -213,8 +214,18 @@ export default function SwapPanel() {
     const [txLoading, setTxLoading] = useState(false);
     const [isQuoting, setIsQuoting] = useState(false);
 
-    const [bchBalance, setBchBalance] = useState<number | null>(null);
-    const [tokenBalances, setTokenBalances] = useState<{ category: string; amount: number }[]>([]);
+    const portfolioBalances = usePortfolioBalancesStore(s =>
+        address ? s.byAddress[address]?.data ?? null : null,
+    );
+    const fetchPortfolioBalances = usePortfolioBalancesStore(s => s.fetch);
+
+    const bchBalance = portfolioBalances?.bch ?? null;
+    const tokenBalances = useMemo(
+        () =>
+            portfolioBalances?.tokens?.map(t => ({ category: t.category, amount: t.amount })) ??
+            [],
+        [portfolioBalances?.tokens],
+    );
     const tokensWithBalance = useMemo(
         () =>
             tokens.map(t => ({
@@ -245,43 +256,11 @@ export default function SwapPanel() {
         }
     }, [tokens, pathname, searchParams]);
 
-    // Load user balances for percentage buttons
+    // Load user balances for percentage buttons (reuses portfolioBalances store with TTL)
     useEffect(() => {
-        if (!isConnected || !address) {
-            setBchBalance(null);
-            setTokenBalances([]);
-            return;
-        }
-
-        let cancelled = false;
-
-        fetch(`/api/portfolio/balances?address=${encodeURIComponent(address)}`)
-            .then(res => {
-                if (!res.ok) {
-                    return res
-                        .json()
-                        .then(b => Promise.reject(new Error(b?.error || res.statusText)));
-                }
-                return res.json();
-            })
-            .then((json: { bch: number; tokens: { category: string; amount: number }[] }) => {
-                if (cancelled) return;
-                setBchBalance(json.bch);
-                setTokenBalances(
-                    json.tokens?.map(t => ({ category: t.category, amount: t.amount })) ?? [],
-                );
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setBchBalance(null);
-                    setTokenBalances([]);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [isConnected, address]);
+        if (!isConnected || !address) return;
+        void fetchPortfolioBalances(address);
+    }, [isConnected, address, fetchPortfolioBalances]);
 
     const activeAmount = lastEdited === "input" ? inputAmount : outputAmount;
 

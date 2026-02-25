@@ -7,6 +7,14 @@ import {
 } from '../common';
 import { getPoolOwnersCollection } from '@/lib/mongodb';
 import type { RegisteredPoolOwner, AllPoolsResult, PoolSummary } from './types';
+import { getOrSet } from '@/lib/cache';
+
+const ALL_POOLS_CACHE_KEY = 'registry:all-pools';
+// Pool liquidity and counts do not need sub-second accuracy,
+// so a short-lived TTL is acceptable to reduce load.
+const ALL_POOLS_TTL_MS = 15_000;
+
+const POOLS_FOR_TOKEN_TTL_MS = 15_000;
 
 /**
  * Register pool owner (persisted in MongoDB)
@@ -87,10 +95,7 @@ export async function clearRegistry(): Promise<void> {
     await col.deleteMany({});
 }
 
-/**
- * Get all registered pools (from registered owners + on-chain UTXOs)
- */
-export async function getAllPools(): Promise<AllPoolsResult> {
+async function computeAllPools(): Promise<AllPoolsResult> {
     const owners = await getRegisteredOwners();
     const pools: PoolSummary[] = [];
     const tokenCounts = new Map<string, number>();
@@ -138,42 +143,57 @@ export async function getAllPools(): Promise<AllPoolsResult> {
 }
 
 /**
- * Get all pools for a specific token
+ * Get all registered pools (from registered owners + on-chain UTXOs),
+ * cached in memory to avoid repeated Electrum + metadata lookups.
+ */
+export async function getAllPools(): Promise<AllPoolsResult> {
+    return getOrSet(ALL_POOLS_CACHE_KEY, computeAllPools, ALL_POOLS_TTL_MS);
+}
+
+/**
+ * Get all pools for a specific token.
+ * Result is cached per tokenCategory for a short TTL.
  */
 export async function getPoolsForToken(tokenCategory: string): Promise<PoolSummary[]> {
-    const owners = await getRegisteredOwners();
-    const pools: PoolSummary[] = [];
+    return getOrSet(
+        `registry:pools:${tokenCategory}`,
+        async () => {
+            const owners = await getRegisteredOwners();
+            const pools: PoolSummary[] = [];
 
-    for (const owner of owners) {
-        const pkh = hexToBin(owner.pkhHex);
-        const contract = getExchangeContract(pkh);
-        const utxos = await contract.getUtxos();
+            for (const owner of owners) {
+                const pkh = hexToBin(owner.pkhHex);
+                const contract = getExchangeContract(pkh);
+                const utxos = await contract.getUtxos();
 
-        const poolUtxo = utxos.find((u) => u.token?.category === tokenCategory);
+                const poolUtxo = utxos.find((u) => u.token?.category === tokenCategory);
 
-        if (poolUtxo && poolUtxo.token) {
-            const metadata = await fetchTokenMetadata(tokenCategory);
+                if (poolUtxo && poolUtxo.token) {
+                    const metadata = await fetchTokenMetadata(tokenCategory);
 
-            const bchReserve = satoshiToBch(poolUtxo.satoshis);
-            const tokenReserve = tokenFromOnChain(poolUtxo.token.amount, tokenCategory);
-            const tokenPriceInBch = bchReserve / tokenReserve;
+                    const bchReserve = satoshiToBch(poolUtxo.satoshis);
+                    const tokenReserve = tokenFromOnChain(poolUtxo.token.amount, tokenCategory);
+                    const tokenPriceInBch = bchReserve / tokenReserve;
 
-            pools.push({
-                poolAddress: contract.tokenAddress,
-                poolOwnerPkhHex: owner.pkhHex,
-                tokenCategory,
-                tokenSymbol: metadata?.symbol,
-                tokenName: metadata?.name,
-                tokenIconUrl: metadata?.iconUrl,
-                bchReserve,
-                tokenReserve,
-                tokenPriceInBch,
-            });
-        }
-    }
+                    pools.push({
+                        poolAddress: contract.tokenAddress,
+                        poolOwnerPkhHex: owner.pkhHex,
+                        tokenCategory,
+                        tokenSymbol: metadata?.symbol,
+                        tokenName: metadata?.name,
+                        tokenIconUrl: metadata?.iconUrl,
+                        bchReserve,
+                        tokenReserve,
+                        tokenPriceInBch,
+                    });
+                }
+            }
 
-    pools.sort((a, b) => b.bchReserve - a.bchReserve);
-    return pools;
+            pools.sort((a, b) => b.bchReserve - a.bchReserve);
+            return pools;
+        },
+        POOLS_FOR_TOKEN_TTL_MS
+    );
 }
 
 /**

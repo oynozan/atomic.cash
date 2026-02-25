@@ -30,6 +30,7 @@ import {
 } from './config';
 
 import type { TokenMetadata, UnsignedTxTemplate } from './types';
+import { cache } from '../lib/cache';
 
 const electrumNetwork = NETWORK_STRING as 'mainnet' | 'testnet4' | 'chipnet';
 
@@ -51,8 +52,8 @@ const contractPath = join(dirname(fileURLToPath(import.meta.url)), 'contracts', 
 
 export const artifact = compileFile(contractPath);
 
-const tokenDecimalCache = new Map<string, number>();
-const tokenMetadataCache = new Map<string, TokenMetadata>();
+const TOKEN_DECIMALS_CACHE_PREFIX = 'token:decimals:';
+const TOKEN_METADATA_CACHE_PREFIX = 'token:metadata:';
 
 /**
  * Convert a standard CashAddr (p2pkh / p2sh) to its
@@ -93,24 +94,26 @@ export function toTokenAddress(address: string): string {
 }
 
 /**
- * Add token decimal value to cache
+ * Add token decimal value to central cache.
  */
 export function setTokenDecimals(tokenCategory: string, decimals: number): void {
-    tokenDecimalCache.set(tokenCategory, decimals);
+    cache.set<number>(`${TOKEN_DECIMALS_CACHE_PREFIX}${tokenCategory}`, decimals);
 }
 
 /**
- * Get token decimal value
+ * Get token decimal value from central cache (or default).
  */
 export function getTokenDecimals(tokenCategory: string): number {
-    return tokenDecimalCache.get(tokenCategory) ?? DEFAULT_TOKEN_DECIMALS;
+    const cached = cache.get<number>(`${TOKEN_DECIMALS_CACHE_PREFIX}${tokenCategory}`);
+    return cached ?? DEFAULT_TOKEN_DECIMALS;
 }
 
 /**
  * Fetch token metadata from BCMR API
  */
 export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMetadata | null> {
-    const cached = tokenMetadataCache.get(tokenCategory);
+    const cacheKey = `${TOKEN_METADATA_CACHE_PREFIX}${tokenCategory}`;
+    const cached = cache.get<TokenMetadata>(cacheKey);
     if (cached) return cached;
     
     try {
@@ -129,8 +132,8 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
             description: data.description,
             isNft: data.is_nft,
         };
-        
-        tokenMetadataCache.set(tokenCategory, metadata);
+
+        cache.set<TokenMetadata>(cacheKey, metadata);
         setTokenDecimals(tokenCategory, metadata.decimals);
         
         return metadata;
@@ -151,7 +154,7 @@ export async function ensureTokenDecimals(
         return providedDecimals;
     }
     
-    const cached = tokenDecimalCache.get(tokenCategory);
+    const cached = cache.get<number>(`${TOKEN_DECIMALS_CACHE_PREFIX}${tokenCategory}`);
     if (cached !== undefined) return cached;
     
     const metadata = await fetchTokenMetadata(tokenCategory);

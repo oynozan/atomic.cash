@@ -59,6 +59,7 @@ export default function PortfolioActions() {
   const loadingByAddress = usePortfolioBalancesStore((s) => s.loading);
   const setPortfolioBchInStore = usePortfolioBalancesStore((s) => s.setPortfolioBch);
   const invalidateBalances = usePortfolioBalancesStore((s) => s.invalidate);
+  const fetchBalanceHistory = usePortfolioBalanceHistoryStore((s) => s.fetch);
   const invalidateBalanceHistory = usePortfolioBalanceHistoryStore((s) => s.invalidate);
 
   const balances = address ? (byAddress[address]?.data ?? null) : null;
@@ -257,8 +258,12 @@ export default function PortfolioActions() {
           ? `Send submitted successfully. TxID: ${broadcastData.txid}`
           : "Send submitted successfully.",
       );
+      // Ensure fresh portfolio data after a successful send.
+      // Invalidate first to drop any stale cache, then force-refetch.
       invalidateBalances(address);
       invalidateBalanceHistory(address);
+      void fetchBalances(address, true);
+      void fetchBalanceHistory(address, true);
       setSendOpen(false);
       setSendAssetType("bch");
       setSelectedTokenCategory(null);
