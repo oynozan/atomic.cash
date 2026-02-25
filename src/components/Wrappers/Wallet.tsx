@@ -204,6 +204,8 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             const p = await UniversalProvider.init({
                 projectId,
                 metadata: wcMetadata,
+                // Suppress WalletConnect relay message errors (e.g. onRelayMessage) that spam the console
+                logger: "silent",
             });
 
             const m = createAppKit({
