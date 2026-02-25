@@ -5,8 +5,6 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import {
     useTokensOverviewStore,
-    type TokenOverview,
-    type TokensOverviewResponse,
 } from "@/store/tokensOverview";
 
 function formatNumber(n: number | null, maxDecimals = 6): string {
@@ -19,7 +17,10 @@ function formatNumber(n: number | null, maxDecimals = 6): string {
 }
 
 function formatPercent(n: number | null): { label: string; positive: boolean } {
-    if (n == null || !Number.isFinite(n)) return { label: "–", positive: true };
+    // Treat null / NaN / ~0 as \"no change\" and show \"–\"
+    if (n == null || !Number.isFinite(n) || Math.abs(n) < 0.005) {
+        return { label: "–", positive: true };
+    }
     const rounded = n.toFixed(2);
     return { label: `${rounded}%`, positive: n >= 0 };
 }
@@ -27,6 +28,7 @@ function formatPercent(n: number | null): { label: string; positive: boolean } {
 export default function TokensTable() {
     const { data, loading, error, fetch: fetchTokens } = useTokensOverviewStore();
     const [search, setSearch] = useState("");
+    const [sortMode, setSortMode] = useState<"tvl" | "gainers" | "losers" | "volume">("tvl");
 
     useEffect(() => {
         fetchTokens();
@@ -36,18 +38,44 @@ export default function TokensTable() {
 
     const filteredTokens = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return tokens;
-        return tokens.filter(t => {
-            const symbol = t.symbol ?? "";
-            const name = t.name ?? "";
-            const category = t.tokenCategory;
-            return (
-                symbol.toLowerCase().includes(q) ||
-                name.toLowerCase().includes(q) ||
-                category.toLowerCase().includes(q)
-            );
-        });
-    }, [tokens, search]);
+        let list = tokens;
+
+        if (q) {
+            list = list.filter(t => {
+                const symbol = t.symbol ?? "";
+                const name = t.name ?? "";
+                const category = t.tokenCategory;
+                return (
+                    symbol.toLowerCase().includes(q) ||
+                    name.toLowerCase().includes(q) ||
+                    category.toLowerCase().includes(q)
+                );
+            });
+        }
+
+        // Sort
+        const sorted = [...list];
+        if (sortMode === "tvl") {
+            sorted.sort((a, b) => b.tvlBch - a.tvlBch);
+        } else if (sortMode === "gainers") {
+            sorted.sort((a, b) => {
+                const av = a.change1dPercent ?? -Infinity;
+                const bv = b.change1dPercent ?? -Infinity;
+                return bv - av;
+            });
+        } else if (sortMode === "losers") {
+            sorted.sort((a, b) => {
+                const av = a.change1dPercent ?? Infinity;
+                const bv = b.change1dPercent ?? Infinity;
+                return av - bv;
+            });
+        } else if (sortMode === "volume") {
+            sorted.sort((a, b) => b.volume30dBch - a.volume30dBch);
+        }
+
+        return sorted;
+    }, [tokens, search, sortMode]);
+
 
     if (loading && !tokens.length) {
         return (
@@ -76,7 +104,55 @@ export default function TokensTable() {
     return (
         <div className="rounded-[24px] border bg-popover py-4 px-4 flex flex-col gap-3">
             <div className="mb-2 flex items-center justify-between px-1">
-                <h2 className="text-sm font-semibold text-foreground">Tokens</h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-sm font-semibold text-foreground">Tokens</h2>
+                    <div className="hidden md:inline-flex items-center gap-1 rounded-full border bg-background/40 px-1 py-0.5 text-[11px]">
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("tvl")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "tvl"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            TVL
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("gainers")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "gainers"
+                                    ? "bg-emerald-500 text-emerald-950"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            Top ↑
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("losers")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "losers"
+                                    ? "bg-red-500 text-red-50"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            Top ↓
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("volume")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "volume"
+                                    ? "bg-sky-500 text-sky-950"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            Vol
+                        </button>
+                    </div>
+                </div>
                 <input
                     type="text"
                     value={search}

@@ -4,7 +4,6 @@
 //
 // IMPORTANT: If there are other pools in the market, the new pool should be at the market price. Otherwise, you will be an arbitrage victim!
 
-import { hash160 } from "@cashscript/utils";
 import { hexToBin } from "@bitauth/libauth";
 import {
     provider,
@@ -17,6 +16,7 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
+    ensureTokenDecimals,
 } from "../common";
 
 import { DEFAULT_MINER_FEE } from "../config";
@@ -32,6 +32,9 @@ export async function getMarketPrice(tokenCategory: string): Promise<{
     totalLiquidity: number;
     poolCount: number;
 } | null> {
+    // Ensure token decimals are initialized before using tokenFromOnChain.
+    await ensureTokenDecimals(tokenCategory);
+
     const owners = await getRegisteredOwners();
     if (owners.length === 0) return null;
 

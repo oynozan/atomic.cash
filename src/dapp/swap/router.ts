@@ -10,6 +10,7 @@ import {
     bchToSatoshi,
     tokenFromOnChain,
     tokenToOnChain,
+    ensureTokenDecimals,
 } from "../common";
 import { getRegisteredOwners } from "../queries/registry";
 import type { RouteQuote, BestRouteResult, SplitRouteResult } from "./types";
@@ -21,6 +22,8 @@ export async function findBestRouteForBchToToken(
     tokenCategory: string,
     bchAmount: number,
 ): Promise<BestRouteResult> {
+    // Ensure token decimals are initialized before any tokenFromOnChain calls.
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
 
     if (owners.length === 0) {
@@ -100,6 +103,7 @@ export async function findBestRouteForBchForExactTokens(
     tokenCategory: string,
     tokenAmount: number,
 ): Promise<BestRouteResult> {
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
 
     if (owners.length === 0) {
@@ -177,6 +181,7 @@ export async function findBestRouteForTokenToBch(
     tokenCategory: string,
     tokenAmount: number,
 ): Promise<BestRouteResult> {
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
 
     if (owners.length === 0) {
@@ -259,6 +264,7 @@ export async function findBestRouteForTokensForExactBch(
     tokenCategory: string,
     bchAmount: number,
 ): Promise<BestRouteResult> {
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
 
     if (owners.length === 0) {
@@ -340,6 +346,7 @@ export async function analyzeSplitRoute(
     bchAmount: number,
     maxPools: number = 3,
 ): Promise<SplitRouteResult | null> {
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
     if (owners.length < 2) return null;
 
@@ -446,6 +453,7 @@ export async function comparePoolPrices(tokenCategory: string): Promise<{
     maxSpread: number;
     arbitrageOpportunity: boolean;
 }> {
+    await ensureTokenDecimals(tokenCategory);
     const owners = await getRegisteredOwners();
     const pools: Array<{
         pkhHex: string;

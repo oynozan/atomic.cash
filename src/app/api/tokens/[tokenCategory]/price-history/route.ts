@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
+import { getTransactionsCollection } from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,20 @@ type PriceHistoryResponse = {
     range: string;
     points: PricePoint[];
 };
+
+function extractInitialPrice(tx: { amounts?: { bchIn?: number; tokenIn?: number } }): number | null {
+    const a = tx.amounts;
+    if (!a) return null;
+    if (
+        typeof a.bchIn === "number" &&
+        typeof a.tokenIn === "number" &&
+        a.bchIn > 0 &&
+        a.tokenIn > 0
+    ) {
+        return a.bchIn / a.tokenIn;
+    }
+    return null;
+}
 
 export async function GET(
     request: NextRequest,
@@ -56,7 +70,14 @@ export async function GET(
         const points: PricePoint[] = [];
 
         for (const tx of trades) {
-            const a = tx.amounts;
+            const a = tx.amounts as
+                | {
+                      bchIn?: number;
+                      bchOut?: number;
+                      tokenIn?: number;
+                      tokenOut?: number;
+                  }
+                | undefined;
             if (!a) continue;
             let tradePrice: number | null = null;
             if (
@@ -80,6 +101,26 @@ export async function GET(
                 points.push({ timestamp: tx.createdAt, priceBch: tradePrice });
             }
         }
+
+        // Include initial pool price so that long‑term move (since launch)
+        // matches the percentage change shown in headers.
+        const initialTx = await coll
+            .find({
+                type: "create_pool",
+                tokenCategory,
+            })
+            .sort({ createdAt: 1 })
+            .limit(1)
+            .toArray();
+
+        if (initialTx.length > 0) {
+            const p0 = extractInitialPrice(initialTx[0] as { amounts?: { bchIn?: number; tokenIn?: number } });
+            if (p0 != null && Number.isFinite(p0) && p0 > 0) {
+                points.push({ timestamp: initialTx[0]!.createdAt, priceBch: p0 });
+            }
+        }
+
+        points.sort((a, b) => a.timestamp - b.timestamp);
 
         const body: PriceHistoryResponse = {
             tokenCategory,

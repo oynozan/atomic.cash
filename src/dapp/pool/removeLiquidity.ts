@@ -15,6 +15,7 @@ import {
     filterBchUtxos,
     bytesToHex,
     toTokenAddress,
+    ensureTokenDecimals,
 } from "../common";
 
 import { DEFAULT_MINER_FEE, DUST_LIMIT } from "../config";
@@ -47,8 +48,11 @@ export async function removeLiquidity(
     params: RemoveLiquidityParams,
     options: RemoveLiquidityOptions,
 ): Promise<RemoveLiquidityResult> {
-    const { tokenCategory, percentage, bchAmount, withdrawAll = false } = params;
+    const { tokenCategory, percentage, bchAmount, withdrawAll = false, tokenDecimals } = params;
     const { ownerTokenAddress } = options;
+
+    // Ensure token decimals are initialized before using tokenFromOnChain.
+    await ensureTokenDecimals(tokenCategory, tokenDecimals);
 
     // At least one must be provided
     if (!withdrawAll && percentage === undefined && bchAmount === undefined) {

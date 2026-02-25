@@ -7,6 +7,7 @@ import {
     filterTokenUtxos,
     tokenToOnChain,
     toTokenAddress,
+    ensureTokenDecimals,
 } from "@/dapp/common";
 import { DUST_LIMIT, DEFAULT_MINER_FEE } from "@/dapp/config";
 import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "@/dapp/types";
@@ -62,6 +63,9 @@ export async function POST(request: NextRequest) {
     if (tokenCategory && tokenCategory.trim() !== "") {
         try {
             const category = tokenCategory.trim();
+
+            // Ensure token decimals are initialized before using tokenToOnChain()
+            await ensureTokenDecimals(category);
 
             // Use token-aware address forms when querying UTXOs and creating token outputs
             const fromTokenAddress = toTokenAddress(from);

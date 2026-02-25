@@ -33,7 +33,7 @@ export default function PriceChart({
 }) {
     const [range, setRange] = useState<"24h" | "7d" | "30d">("30d");
     const [data, setData] = useState<PriceHistoryResponse | null>(null);
-    const [, setLoading] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -42,6 +42,7 @@ export default function PriceChart({
         const run = async () => {
             setLoading(true);
             setError(null);
+            setData(null);
             const param = range === "24h" ? "1d" : range === "7d" ? "7d" : "30d";
             const url = `/api/tokens/${encodeURIComponent(
                 tokenCategory,
@@ -74,7 +75,9 @@ export default function PriceChart({
         const w = 400;
         const h = 120;
 
-        if (points.length === 0) {
+        // Hiç geçmiş yoksa veya sadece tek nokta (sadece initial price)
+        // varsa grafik çizmeyelim; "No price data" gösterelim.
+        if (!points.length || points.length < 2) {
             const p = currentPrice ?? 0;
             return {
                 path: "",
@@ -137,7 +140,7 @@ export default function PriceChart({
                 </div>
             </div>
             {error && <div className="py-6 text-center text-sm text-destructive">{error}</div>}
-            {!data ? (
+            {loading || !data ? (
                 <div className="h-[120px] flex items-center justify-center text-muted-foreground text-sm">
                     Loading…
                 </div>

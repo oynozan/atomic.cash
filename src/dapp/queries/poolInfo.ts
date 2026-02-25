@@ -62,7 +62,10 @@ export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolIn
 
     for (const [category, pool] of poolsMap) {
         const metadata = await fetchTokenMetadata(category);
-        const decimals = metadata?.decimals ?? 8;
+        const decimals = metadata?.decimals;
+        if (typeof decimals === "number") {
+            await ensureTokenDecimals(category, decimals);
+        }
 
         const bchReserve = satoshiToBch(pool.bch);
         const tokenReserve = tokenFromOnChain(pool.tokens, category);
@@ -74,14 +77,14 @@ export async function getPoolsForOwner(poolOwnerPkh: Uint8Array): Promise<PoolIn
             // Spot price (direct ratio, fee excluded)
             // This is the ratio preserved in liquidity addition/removal
             tokenPriceInBch =
-                (Number(pool.bch) * Math.pow(10, decimals)) / (Number(pool.tokens) * 1e8);
+                (Number(pool.bch) * Math.pow(10, decimals ?? 0)) / (Number(pool.tokens) * 1e8);
             bchPriceInToken = 1 / tokenPriceInBch;
         }
 
         pools.push({
             tokenCategory: category,
             tokenSymbol: metadata?.symbol,
-            tokenDecimals: decimals,
+            tokenDecimals: decimals ?? 0,
             poolOwnerPkhHex: pkhHex,
             poolAddress: contract.address,
             bchReserve,
@@ -126,7 +129,10 @@ export async function getPool(
     }
 
     const metadata = await fetchTokenMetadata(tokenCategory);
-    const decimals = metadata?.decimals ?? tokenDecimals ?? 8;
+    const decimals = metadata?.decimals ?? tokenDecimals;
+    if (typeof decimals === "number") {
+        await ensureTokenDecimals(tokenCategory, decimals);
+    }
 
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
@@ -146,7 +152,7 @@ export async function getPool(
     return {
         tokenCategory,
         tokenSymbol: metadata?.symbol,
-        tokenDecimals: decimals,
+        tokenDecimals: decimals ?? 0,
         poolOwnerPkhHex: pkhHex,
         poolAddress: contract.address,
         bchReserve,

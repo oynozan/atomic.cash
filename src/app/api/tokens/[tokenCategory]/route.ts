@@ -33,6 +33,20 @@ function extractBchVolume(tx: StoredTransaction): number {
     return candidates[0]!;
 }
 
+function extractInitialPrice(tx: StoredTransaction): number | null {
+    const a = tx.amounts;
+    if (!a) return null;
+    if (
+        typeof a.bchIn === "number" &&
+        typeof a.tokenIn === "number" &&
+        a.bchIn > 0 &&
+        a.tokenIn > 0
+    ) {
+        return a.bchIn / a.tokenIn;
+    }
+    return null;
+}
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ tokenCategory: string }> },
@@ -69,16 +83,14 @@ export async function GET(
         const priceBch =
             priceDen > 0 && Number.isFinite(priceNum / priceDen) ? priceNum / priceDen : null;
 
+        const txColl = await getTransactionsCollection();
         const now = Date.now();
         const dayMs = 24 * 60 * 60 * 1000;
-        const last1dStart = now - dayMs;
-        const last7dStart = now - 7 * dayMs;
         const last24Start = now - dayMs;
         const prev24Start = now - 2 * dayMs;
         const last30Start = now - 30 * dayMs;
         const prev30Start = now - 60 * dayMs;
 
-        const txColl = await getTransactionsCollection();
         const recentSwaps = await txColl
             .find({
                 type: "swap",
@@ -91,10 +103,6 @@ export async function GET(
         let prev24hBch = 0;
         let volume30dBch = 0;
         let prev30dBch = 0;
-        let price1dNum = 0;
-        let price1dDen = 0;
-        let price7dNum = 0;
-        let price7dDen = 0;
 
         for (const tx of recentSwaps) {
             const volumeBch = extractBchVolume(tx);
@@ -105,56 +113,34 @@ export async function GET(
 
             if (tx.createdAt >= last30Start) volume30dBch += volumeBch;
             else if (tx.createdAt >= prev30Start) prev30dBch += volumeBch;
+        }
 
-            const a = tx.amounts;
-            if (!a) continue;
-            let tradePrice: number | null = null;
-            if (
-                tx.direction === "bch_to_token" &&
-                typeof a.bchIn === "number" &&
-                typeof a.tokenOut === "number" &&
-                a.bchIn > 0 &&
-                a.tokenOut > 0
-            ) {
-                tradePrice = a.bchIn / a.tokenOut;
-            } else if (
-                tx.direction === "token_to_bch" &&
-                typeof a.bchOut === "number" &&
-                typeof a.tokenIn === "number" &&
-                a.bchOut > 0 &&
-                a.tokenIn > 0
-            ) {
-                tradePrice = a.bchOut / a.tokenIn;
-            }
-            if (tradePrice == null || !Number.isFinite(tradePrice)) continue;
+        // Initial price from earliest create_pool for this token (same as tokens overview)
+        const initialTx = await txColl
+            .find({
+                type: "create_pool",
+                tokenCategory,
+            })
+            .sort({ createdAt: 1 })
+            .limit(1)
+            .toArray();
 
-            if (tx.createdAt >= last7dStart) {
-                price7dNum += tradePrice * volumeBch;
-                price7dDen += volumeBch;
-            }
-            if (tx.createdAt >= last1dStart) {
-                price1dNum += tradePrice * volumeBch;
-                price1dDen += volumeBch;
+        let initialPrice: number | null = null;
+        if (initialTx.length > 0) {
+            const p0 = extractInitialPrice(initialTx[0]!);
+            if (p0 != null && Number.isFinite(p0) && p0 > 0) {
+                initialPrice = p0;
             }
         }
 
-        const avg1d =
-            price1dDen > 0 && Number.isFinite(price1dNum / price1dDen)
-                ? price1dNum / price1dDen
-                : null;
-        const avg7d =
-            price7dDen > 0 && Number.isFinite(price7dNum / price7dDen)
-                ? price7dNum / price7dDen
+        const changeSinceLaunch =
+            priceBch != null && initialPrice != null && initialPrice !== 0
+                ? ((priceBch - initialPrice) / Math.abs(initialPrice)) * 100
                 : null;
 
-        const change1dPercent =
-            priceBch != null && avg1d != null && avg1d !== 0
-                ? ((priceBch - avg1d) / Math.abs(avg1d)) * 100
-                : null;
-        const change7dPercent =
-            priceBch != null && avg7d != null && avg7d !== 0
-                ? ((priceBch - avg7d) / Math.abs(avg7d)) * 100
-                : null;
+        // For now 1d and 7d both reflect change since pool creation.
+        const change1dPercent = changeSinceLaunch;
+        const change7dPercent = changeSinceLaunch;
 
         const body: TokenDetailResponse = {
             tokenCategory,

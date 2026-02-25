@@ -22,9 +22,12 @@ function formatBch(n: number | null): string {
 }
 
 export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderData }) {
-    const change = data.change1dPercent ?? data.change7dPercent ?? null;
-    const hasChange = change != null && Number.isFinite(change);
-    const positive = hasChange && change >= 0;
+    const rawChange = data.change1dPercent ?? data.change7dPercent ?? null;
+    const hasRawChange = rawChange != null && Number.isFinite(rawChange);
+    const change =
+        hasRawChange && Math.abs(rawChange as number) >= 0.005 ? (rawChange as number) : null;
+    const hasChange = change != null;
+    const positive = hasChange && change! >= 0;
 
     return (
         <div className="flex flex-wrap items-center gap-4">
@@ -66,7 +69,7 @@ export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderDat
                         ) : (
                             <ArrowDownRight className="size-4" />
                         )}
-                        {Math.abs(change).toFixed(2)}%
+                        {Math.abs(change!).toFixed(2)}%
                     </span>
                 )}
             </div>

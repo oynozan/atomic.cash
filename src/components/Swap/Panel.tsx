@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Github } from "lucide-react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 
 import ConnectWallet from "@/components/Header/Connect";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
+import { getAddressExplorerUrl } from "@/dapp/explorer";
 
 type Direction = "bch_to_token" | "token_to_bch";
 
@@ -21,6 +22,7 @@ type TokenOption = {
     iconUrl?: string;
     poolCount?: number;
     totalBchLiquidity?: number;
+    priceBch?: number | null;
     balance?: number;
 };
 
@@ -31,6 +33,8 @@ type SwapQuote = {
     effectivePrice: number;
     fee: number;
 };
+
+const QUOTE_REFRESH_INTERVAL_MS = 20_000;
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -169,6 +173,7 @@ export default function SwapPanel() {
     const { address, isConnected, session, provider } = useWalletSession();
     const searchParams = useSearchParams();
     const pathname = usePathname();
+    const router = useRouter();
 
     const [direction, setDirection] = useState<Direction>("bch_to_token");
     const [inputAmount, setInputAmount] = useState("");
@@ -178,7 +183,6 @@ export default function SwapPanel() {
 
     const {
         data: overviewData,
-        loading: tokensLoading,
         error: tokensError,
         fetch: fetchTokensOverview,
     } = useTokensOverviewStore();
@@ -192,6 +196,7 @@ export default function SwapPanel() {
                 symbol: t.symbol,
                 name: t.name,
                 iconUrl: t.iconUrl,
+                priceBch: t.priceBch,
                 totalBchLiquidity: t.tvlBch,
             }))
             .sort((a, b) => (b.totalBchLiquidity ?? 0) - (a.totalBchLiquidity ?? 0));
@@ -204,6 +209,10 @@ export default function SwapPanel() {
     const [priceImpact, setPriceImpact] = useState<number | null>(null);
     const [effectivePrice, setEffectivePrice] = useState<number | null>(null);
     const [spotPrice, setSpotPrice] = useState<number | null>(null);
+    const [activePool, setActivePool] = useState<{
+        ownerPkhHex: string;
+        address?: string | null;
+    } | null>(null);
 
     const [txLoading, setTxLoading] = useState(false);
     const [isQuoting, setIsQuoting] = useState(false);
@@ -242,7 +251,9 @@ export default function SwapPanel() {
         if (!urlToken) return;
         const found = tokens.find(t => t.category === urlToken);
         if (found) {
-            setSelectedToken(found);
+            setSelectedToken(prev =>
+                prev && prev.category === found.category ? prev : found,
+            );
         } else {
             toast.error("No pool found for the requested token.");
             setSelectedToken(null);
@@ -255,7 +266,10 @@ export default function SwapPanel() {
         void fetchPortfolioBalances(address);
     }, [isConnected, address, fetchPortfolioBalances]);
 
-    const activeAmount = lastEdited === "input" ? inputAmount : outputAmount;
+    const activeAmount = useMemo(
+        () => (lastEdited === "input" ? inputAmount : outputAmount),
+        [lastEdited, inputAmount, outputAmount],
+    );
 
     const activeAmountNumber = useMemo(() => {
         const v = parseFloat(activeAmount);
@@ -268,14 +282,15 @@ export default function SwapPanel() {
         // No positive amount entered
         if (!activeAmountNumber) return null;
 
-        // Balance checks
+        // Wallet balance checks
         if (direction === "bch_to_token") {
             if (bchBalance != null && bchBalance < activeAmountNumber) {
                 return "Not enough BCH to swap.";
             }
         } else {
             const tb = tokenBalances.find(t => t.category === selectedToken.category);
-            if (tb && tb.amount < activeAmountNumber) {
+            const tokenBalance = tb?.amount ?? 0;
+            if (tokenBalance < activeAmountNumber) {
                 return `Not enough ${selectedToken.symbol ?? "tokens"} to swap.`;
             }
         }
@@ -306,14 +321,141 @@ export default function SwapPanel() {
         swapType,
     ]);
 
+    const hasValidQuote = quote && quote.outputAmount > 0;
+
+    // Used only for UX (button label): true whenever the UI knows
+    // that it is (or soon will be) refreshing the quote for the
+    // current amount.
+    const isQuoteStaleOrLoading =
+        !!selectedToken &&
+        activeAmountNumber > 0 &&
+        !validationError &&
+        (!hasValidQuote || isQuoting);
+
     const canSwap =
         isConnected &&
         !!address &&
         !!selectedToken &&
-        !tokensLoading &&
-        !tokensError &&
         activeAmountNumber > 0 &&
-        !validationError;
+        !validationError &&
+        !!hasValidQuote &&
+        !isQuoting;
+
+    // Periodically refresh quote for the current amount to keep prices fresh,
+    // similar to popular DEX UIs (e.g. ~20s interval).
+    useEffect(() => {
+        if (!selectedToken) return;
+        if (!hasValidQuote) return;
+        if (!isConnected || !address) return;
+        if (!activeAmountNumber) return;
+
+        let cancelled = false;
+
+        const intervalId = setInterval(() => {
+            if (cancelled) return;
+            if (isQuoting) return;
+
+            const value = parseFloat(activeAmount);
+            if (!Number.isFinite(value) || value <= 0) return;
+
+            const controller = new AbortController();
+            quoteAbortRef.current = controller;
+            setIsQuoting(true);
+
+            (async () => {
+                try {
+                    const res = await fetch("/api/swap/quote", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            direction,
+                            swapType,
+                            tokenCategory: selectedToken.category,
+                            amount: value,
+                            slippageTolerance: slippage,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || cancelled) {
+                        return;
+                    }
+
+                    const raw = data?.quote;
+                    const hasQuote =
+                        raw &&
+                        typeof raw === "object" &&
+                        typeof raw.inputAmount === "number" &&
+                        Number.isFinite(raw.inputAmount) &&
+                        typeof raw.outputAmount === "number" &&
+                        Number.isFinite(raw.outputAmount) &&
+                        typeof raw.priceImpact === "number" &&
+                        Number.isFinite(raw.priceImpact) &&
+                        typeof raw.effectivePrice === "number" &&
+                        Number.isFinite(raw.effectivePrice);
+                    const feeVal =
+                        typeof raw?.feeAmount === "number" && Number.isFinite(raw.feeAmount)
+                            ? raw.feeAmount
+                            : typeof raw?.fee === "number" && Number.isFinite(raw.fee)
+                              ? raw.fee
+                              : 0;
+
+                    if (!hasQuote || cancelled) {
+                        return;
+                    }
+
+                    setQuote({
+                        inputAmount: raw.inputAmount,
+                        outputAmount: raw.outputAmount,
+                        priceImpact: raw.priceImpact,
+                        effectivePrice: raw.effectivePrice,
+                        fee: feeVal,
+                    });
+                    setPriceImpact(raw.priceImpact);
+                    setEffectivePrice(raw.effectivePrice);
+                    if (data.pool && typeof data.pool.ownerPkhHex === "string") {
+                        setActivePool({
+                            ownerPkhHex: data.pool.ownerPkhHex,
+                            address: typeof data.pool.address === "string" ? data.pool.address : null,
+                        });
+                    } else {
+                        setActivePool(null);
+                    }
+
+                    if (swapType === "exact_input") {
+                        setOutputAmount(raw.outputAmount.toString());
+                    } else {
+                        setInputAmount(raw.inputAmount.toString());
+                    }
+                } catch {
+                    // Silently ignore periodic quote errors; keep last good quote.
+                } finally {
+                    setIsQuoting(false);
+                    if (quoteAbortRef.current === controller) {
+                        quoteAbortRef.current = null;
+                    }
+                }
+            })().catch(() => {
+                // already handled above
+            });
+        }, QUOTE_REFRESH_INTERVAL_MS);
+
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [
+        selectedToken,
+        hasValidQuote,
+        isConnected,
+        address,
+        activeAmount,
+        activeAmountNumber,
+        isQuoting,
+        direction,
+        swapType,
+        slippage,
+    ]);
 
     const inputLabel = direction === "bch_to_token" ? "You pay" : "You pay (token)";
     const outputLabel = direction === "bch_to_token" ? "You receive (token)" : "You receive";
@@ -345,6 +487,7 @@ export default function SwapPanel() {
         setQuote(null);
         setPriceImpact(null);
         setEffectivePrice(null);
+        setActivePool(null);
         setSwapType("exact_input");
         setLastEdited("input");
     };
@@ -443,6 +586,7 @@ export default function SwapPanel() {
             setPriceImpact(null);
             setEffectivePrice(null);
             setLastEdited("input");
+            setActivePool(null);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed to swap");
         } finally {
@@ -456,11 +600,11 @@ export default function SwapPanel() {
             setQuote(null);
             setPriceImpact(null);
             setEffectivePrice(null);
+            setActivePool(null);
             return;
         }
 
-        const active = lastEdited === "input" ? inputAmount : outputAmount;
-        const value = parseFloat(active);
+        const value = parseFloat(activeAmount);
         if (!Number.isFinite(value) || value <= 0) {
             setQuote(null);
             setPriceImpact(null);
@@ -536,6 +680,14 @@ export default function SwapPanel() {
                 });
                 setPriceImpact(raw.priceImpact);
                 setEffectivePrice(raw.effectivePrice);
+                if (data.pool && typeof data.pool.ownerPkhHex === "string") {
+                    setActivePool({
+                        ownerPkhHex: data.pool.ownerPkhHex,
+                        address: typeof data.pool.address === "string" ? data.pool.address : null,
+                    });
+                } else {
+                    setActivePool(null);
+                }
 
                 if (swapType === "exact_input") {
                     setOutputAmount(raw.outputAmount.toString());
@@ -571,8 +723,6 @@ export default function SwapPanel() {
             quoteAbortRef.current = null;
             if (timeoutId) clearTimeout(timeoutId);
         };
-        // activeAmount (not inputAmount/outputAmount) to avoid duplicate quote when we set the other side from API
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [direction, swapType, lastEdited, activeAmount, slippage, selectedToken]);
 
     return (
@@ -820,7 +970,11 @@ export default function SwapPanel() {
                         onClick={handleSwap}
                         disabled={!canSwap || txLoading || isQuoting}
                     >
-                        {txLoading ? "Swapping…" : "Swap"}
+                        {txLoading
+                            ? "Swapping…"
+                            : isQuoteStaleOrLoading
+                              ? "Updating quote…"
+                              : "Swap"}
                     </Button>
                     {validationError && (
                         <div className="mt-2 rounded-[14px] border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive text-center">
@@ -841,8 +995,14 @@ export default function SwapPanel() {
                             1 {selectedToken?.symbol ?? selectedToken?.name ?? "TOKEN"} ≈{" "}
                             {(() => {
                                 // We always want: 1 TOKEN = X BCH
-                                // Prefer live quote, but fall back cleanly to spot price
-                                const spot = spotPrice && spotPrice > 0 ? spotPrice : null;
+                                // Prefer live quote, but fall back cleanly to spot/overview price
+                                const overviewPrice =
+                                    typeof selectedToken?.priceBch === "number" &&
+                                    selectedToken.priceBch > 0
+                                        ? selectedToken.priceBch
+                                        : null;
+                                const spot =
+                                    spotPrice && spotPrice > 0 ? spotPrice : overviewPrice;
 
                                 if (quote) {
                                     const rawEff =
@@ -876,6 +1036,24 @@ export default function SwapPanel() {
                             BCH
                         </span>
                     </div>
+                    {activePool && (
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Pool</span>
+                            <a
+                                href={getAddressExplorerUrl(
+                                    activePool.address ?? activePool.ownerPkhHex,
+                                )}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-primary hover:underline"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                {activePool.address
+                                    ? `${activePool.address.slice(0, 6)}…${activePool.address.slice(-6)}`
+                                    : `${activePool.ownerPkhHex.slice(0, 6)}…${activePool.ownerPkhHex.slice(-6)}`}
+                            </a>
+                        </div>
+                    )}
                     <div className="flex justify-between">
                         <span className="text-muted-foreground">Liquidity provider fee (0.3%)</span>
                         <span className="font-mono">
@@ -922,6 +1100,25 @@ export default function SwapPanel() {
                         setPriceImpact(null);
                         setEffectivePrice(null);
                         setOutputAmount("");
+                        // Update URL for deep linking
+                        try {
+                            const path = pathname || "/swap";
+
+                            // If we are on token overview route (/swap/[tokenCategory]),
+                            // navigate by updating the path param so the whole page data refreshes.
+                            if (/^\/swap\/[a-fA-F0-9]+$/.test(path)) {
+                                router.push(`/swap/${t.category}`, { scroll: false });
+                            } else {
+                                // On the homepage (e.g. "/"), just update the ?token= query param.
+                                const basePath = path;
+                                const params = new URLSearchParams(searchParams?.toString());
+                                params.set("token", t.category);
+                                const qs = params.toString();
+                                router.push(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+                            }
+                        } catch {
+                            // non-fatal – URL update best-effort only
+                        }
                     }}
                 />
             )}

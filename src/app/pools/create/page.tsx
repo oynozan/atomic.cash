@@ -23,7 +23,6 @@ import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { usePoolsStore } from "@/store/pools";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
 import { useUserPoolsStore } from "@/store/userPools";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 
 type TokenItem = {
     category: string;
@@ -66,6 +65,7 @@ export default function CreatePoolPage() {
     const fetchBalances = usePortfolioBalancesStore(s => s.fetch);
     const byAddress = usePortfolioBalancesStore(s => s.byAddress);
     const invalidateUserPools = useUserPoolsStore(s => s.invalidate);
+    const fetchUserPools = useUserPoolsStore(s => s.fetch);
 
     const balances = address ? (byAddress[address]?.data ?? null) : null;
 
@@ -134,11 +134,13 @@ export default function CreatePoolPage() {
         let cancelled = false;
 
         const run = async () => {
-            const url = `/api/user/pools?address=${encodeURIComponent(address)}`;
             try {
-                const json = await fetchJsonOnce<{ pools: { tokenCategory: string }[] }>(url);
-                if (cancelled) return;
-                const exists = json.pools?.some(p => p.tokenCategory === tokenCategory);
+                const res = await fetchUserPools(address);
+                if (cancelled || !res) {
+                    if (!cancelled) setHasOwnPoolForToken(false);
+                    return;
+                }
+                const exists = res.pools?.some(p => p.tokenCategory === tokenCategory);
                 setHasOwnPoolForToken(Boolean(exists));
             } catch {
                 if (!cancelled) setHasOwnPoolForToken(false);
@@ -149,7 +151,7 @@ export default function CreatePoolPage() {
         return () => {
             cancelled = true;
         };
-    }, [address, tokenCategory]);
+    }, [address, tokenCategory, fetchUserPools]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

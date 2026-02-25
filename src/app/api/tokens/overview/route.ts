@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 import { getAllPools } from "@/dapp/queries/registry";
@@ -32,14 +32,26 @@ function extractBchVolume(tx: StoredTransaction): number {
     return candidates[0]!;
 }
 
-export async function GET(_request: NextRequest) {
+function extractInitialPrice(tx: StoredTransaction): number | null {
+    const a = tx.amounts;
+    if (!a) return null;
+    if (
+        typeof a.bchIn === "number" &&
+        typeof a.tokenIn === "number" &&
+        a.bchIn > 0 &&
+        a.tokenIn > 0
+    ) {
+        return a.bchIn / a.tokenIn;
+    }
+    return null;
+}
+
+export async function GET() {
     try {
         const [{ pools }, txColl] = await Promise.all([getAllPools(), getTransactionsCollection()]);
 
         const now = Date.now();
         const dayMs = 24 * 60 * 60 * 1000;
-        const last1dStart = now - dayMs;
-        const last7dStart = now - 7 * dayMs;
 
         const tokensMap = new Map<
             string,
@@ -52,11 +64,6 @@ export async function GET(_request: NextRequest) {
                 priceNum: number;
                 priceDen: number;
                 volume30dBch: number;
-                // price history (VWAP) for 1d / 7d
-                price1dNum: number;
-                price1dDen: number;
-                price7dNum: number;
-                price7dDen: number;
             }
         >();
 
@@ -69,10 +76,6 @@ export async function GET(_request: NextRequest) {
                 priceNum: 0,
                 priceDen: 0,
                 volume30dBch: 0,
-                price1dNum: 0,
-                price1dDen: 0,
-                price7dNum: 0,
-                price7dDen: 0,
             };
 
             existing.tvlBch += pool.bchReserve;
@@ -89,9 +92,12 @@ export async function GET(_request: NextRequest) {
 
         const tokenCategories = Array.from(tokensMap.keys());
 
+        const initialPriceByCategory = new Map<string, number>();
+
         if (tokenCategories.length > 0) {
             const last30Start = now - 30 * dayMs;
 
+            // Volume (30d) from swaps
             const recentSwaps = await txColl
                 .find({
                     type: "swap",
@@ -108,41 +114,23 @@ export async function GET(_request: NextRequest) {
                 const volumeBch = extractBchVolume(tx);
                 if (!volumeBch) continue;
                 entry.volume30dBch += volumeBch;
+            }
 
-                // derive trade price (BCH per token) from recorded amounts
-                const a = tx.amounts;
-                if (!a) continue;
-                let tradePrice: number | null = null;
+            // Initial price from earliest create_pool for each token
+            const initialTxs = await txColl
+                .find({
+                    type: "create_pool",
+                    tokenCategory: { $in: tokenCategories },
+                })
+                .sort({ createdAt: 1 })
+                .toArray();
 
-                if (
-                    tx.direction === "bch_to_token" &&
-                    typeof a.bchIn === "number" &&
-                    typeof a.tokenOut === "number" &&
-                    a.bchIn > 0 &&
-                    a.tokenOut > 0
-                ) {
-                    tradePrice = a.bchIn / a.tokenOut;
-                } else if (
-                    tx.direction === "token_to_bch" &&
-                    typeof a.bchOut === "number" &&
-                    typeof a.tokenIn === "number" &&
-                    a.bchOut > 0 &&
-                    a.tokenIn > 0
-                ) {
-                    tradePrice = a.bchOut / a.tokenIn;
-                }
-
-                if (tradePrice == null || !Number.isFinite(tradePrice)) continue;
-
-                // BCH volume-weighted average price
-                if (tx.createdAt >= last7dStart) {
-                    entry.price7dNum += tradePrice * volumeBch;
-                    entry.price7dDen += volumeBch;
-                }
-                if (tx.createdAt >= last1dStart) {
-                    entry.price1dNum += tradePrice * volumeBch;
-                    entry.price1dDen += volumeBch;
-                }
+            for (const tx of initialTxs) {
+                if (!tx.tokenCategory) continue;
+                if (initialPriceByCategory.has(tx.tokenCategory)) continue;
+                const p0 = extractInitialPrice(tx);
+                if (p0 == null || !Number.isFinite(p0) || p0 <= 0) continue;
+                initialPriceByCategory.set(tx.tokenCategory, p0);
             }
         }
 
@@ -153,24 +141,16 @@ export async function GET(_request: NextRequest) {
                         ? data.priceNum / data.priceDen
                         : null;
 
-                const avg1d =
-                    data.price1dDen > 0 && Number.isFinite(data.price1dNum / data.price1dDen)
-                        ? data.price1dNum / data.price1dDen
-                        : null;
-                const avg7d =
-                    data.price7dDen > 0 && Number.isFinite(data.price7dNum / data.price7dDen)
-                        ? data.price7dNum / data.price7dDen
+                const initialPrice = initialPriceByCategory.get(category) ?? null;
+
+                const changeSinceLaunch =
+                    priceBch != null && initialPrice != null && initialPrice !== 0
+                        ? ((priceBch - initialPrice) / Math.abs(initialPrice)) * 100
                         : null;
 
-                const change1dPercent =
-                    priceBch != null && avg1d != null && avg1d !== 0
-                        ? ((priceBch - avg1d) / Math.abs(avg1d)) * 100
-                        : null;
-
-                const change7dPercent =
-                    priceBch != null && avg7d != null && avg7d !== 0
-                        ? ((priceBch - avg7d) / Math.abs(avg7d)) * 100
-                        : null;
+                // For now 1d and 7d both reflect change since pool creation.
+                const change1dPercent = changeSinceLaunch;
+                const change7dPercent = changeSinceLaunch;
 
                 return {
                     tokenCategory: category,

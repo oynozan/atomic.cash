@@ -7,8 +7,9 @@ import TokenDetailHeader from "@/components/TokenDetail/Header";
 import TokenDetailPriceChart from "@/components/TokenDetail/PriceChart";
 import TokenDetailTradeHistory from "@/components/TokenDetail/TradeHistory";
 import TokenDetailInfo from "@/components/TokenDetail/Info";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
+import { useTokensOverviewStore } from "@/store/tokensOverview";
 
 type TokenDetailResponse = {
     tokenCategory: string;
@@ -33,6 +34,12 @@ export default function SwapTokenPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const overviewTokens = useTokensOverviewStore(s => s.data?.tokens ?? null);
+    const overviewToken = useMemo(
+        () => overviewTokens?.find(t => t.tokenCategory === tokenCategory) ?? null,
+        [overviewTokens, tokenCategory],
+    );
+
     useEffect(() => {
         if (!tokenCategory) {
             setLoading(false);
@@ -43,6 +50,7 @@ export default function SwapTokenPage() {
         const run = async () => {
             setLoading(true);
             setError(null);
+            setData(null);
             const url = `/api/tokens/${encodeURIComponent(tokenCategory)}`;
             try {
                 const json = await fetchJsonOnce<TokenDetailResponse>(url);
@@ -75,21 +83,11 @@ export default function SwapTokenPage() {
         );
     }
 
-    if (loading && !data) {
-        return (
-            <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
-                <div className="home-container max-w-6xl flex items-center justify-center py-20 text-muted-foreground">
-                    Loading…
-                </div>
-            </section>
-        );
-    }
-
-    if (error || !data) {
+    if (error) {
         return (
             <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
                 <div className="home-container max-w-6xl text-center">
-                    <p className="text-destructive mb-4">{error ?? "Token not found"}</p>
+                    <p className="text-destructive mb-4">{error}</p>
                     <Link href="/tokens" className="text-sm text-primary hover:underline">
                         Back to Tokens
                     </Link>
@@ -98,18 +96,50 @@ export default function SwapTokenPage() {
         );
     }
 
+    const view: TokenDetailResponse =
+        data ??
+        (overviewToken && {
+            tokenCategory,
+            symbol: overviewToken.symbol,
+            name: overviewToken.name,
+            iconUrl: overviewToken.iconUrl,
+            priceBch: overviewToken.priceBch,
+            tvlBch: overviewToken.tvlBch,
+            tokenReserveTotal: 0,
+            volume24hBch: 0,
+            volume30dBch: overviewToken.volume30dBch,
+            prev24hBch: 0,
+            prev30dBch: 0,
+            change1dPercent: overviewToken.change1dPercent,
+            change7dPercent: overviewToken.change7dPercent,
+        }) ?? {
+            tokenCategory,
+            symbol: undefined,
+            name: undefined,
+            iconUrl: undefined,
+            priceBch: null,
+            tvlBch: 0,
+            tokenReserveTotal: 0,
+            volume24hBch: 0,
+            volume30dBch: 0,
+            prev24hBch: 0,
+            prev30dBch: 0,
+            change1dPercent: null,
+            change7dPercent: null,
+        };
+
     return (
         <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
             <div className="home-container max-w-6xl w-full">
-                <div className="mb-6">
+                <div className="mb-6 flex items-center justify-between gap-4">
                     <TokenDetailHeader
                         data={{
-                            symbol: data.symbol,
-                            name: data.name,
-                            iconUrl: data.iconUrl,
-                            priceBch: data.priceBch,
-                            change1dPercent: data.change1dPercent,
-                            change7dPercent: data.change7dPercent,
+                            symbol: view.symbol,
+                            name: view.name,
+                            iconUrl: view.iconUrl,
+                            priceBch: view.priceBch,
+                            change1dPercent: view.change1dPercent,
+                            change7dPercent: view.change7dPercent,
                         }}
                     />
                 </div>
@@ -118,13 +148,13 @@ export default function SwapTokenPage() {
                     {/* Left column: chart + trade history */}
                     <div className="space-y-6">
                         <TokenDetailPriceChart
-                            tokenCategory={data.tokenCategory}
-                            currentPrice={data.priceBch}
+                            tokenCategory={view.tokenCategory}
+                            currentPrice={view.priceBch}
                         />
                         <TokenDetailTradeHistory
-                            tokenCategory={data.tokenCategory}
-                            tokenSymbol={data.symbol}
-                            tokenIconUrl={data.iconUrl}
+                            tokenCategory={view.tokenCategory}
+                            tokenSymbol={view.symbol}
+                            tokenIconUrl={view.iconUrl}
                         />
                     </div>
 
@@ -135,15 +165,15 @@ export default function SwapTokenPage() {
                         </div>
                         <TokenDetailInfo
                             data={{
-                                tokenCategory: data.tokenCategory,
-                                symbol: data.symbol,
-                                name: data.name,
-                                tvlBch: data.tvlBch,
-                                tokenReserveTotal: data.tokenReserveTotal,
-                                volume24hBch: data.volume24hBch,
-                                volume30dBch: data.volume30dBch,
-                                prev24hBch: data.prev24hBch,
-                                prev30dBch: data.prev30dBch,
+                                tokenCategory: view.tokenCategory,
+                                symbol: view.symbol,
+                                name: view.name,
+                                tvlBch: view.tvlBch,
+                                tokenReserveTotal: view.tokenReserveTotal,
+                                volume24hBch: view.volume24hBch,
+                                volume30dBch: view.volume30dBch,
+                                prev24hBch: view.prev24hBch,
+                                prev30dBch: view.prev30dBch,
                             }}
                         />
                     </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePoolsStore, type ApiPool } from "@/store/pools";
+import { getAddressExplorerUrl } from "@/dapp/explorer";
 
 function formatNumber(n: number, maxDecimals = 4): string {
     if (!Number.isFinite(n)) return "-";
@@ -234,9 +235,16 @@ function TokenGroupRow({
                                         <span className="text-[11px] text-muted-foreground">
                                             Owner PKH: {pool.poolOwnerPkhHex.slice(0, 10)}…
                                         </span>
-                                        <span className="text-[11px] text-muted-foreground">
-                                            Pool address: {pool.poolAddress.slice(-10)}…
-                                        </span>
+                                        <a
+                                            href={getAddressExplorerUrl(pool.poolAddress)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-[11px] text-primary hover:underline"
+                                        >
+                                            Pool address:{" "}
+                                            {pool.poolAddress.slice(0, 6)}…
+                                            {pool.poolAddress.slice(-6)}
+                                        </a>
                                     </div>
                                     <div className="flex items-center gap-4 text-right">
                                         <div>

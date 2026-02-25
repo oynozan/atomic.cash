@@ -21,7 +21,9 @@ export const ADDRESS_PREFIX: "bitcoincash" | "bchtest" =
     NETWORK === Network.MAINNET ? "bitcoincash" : "bchtest";
 
 export const BCH_DECIMALS = 8;
-export const DEFAULT_TOKEN_DECIMALS = 8;
+// Most CashTokens in this project are minted with 6 decimals.
+// BCMR metadata overrides this per-token when available.
+export const DEFAULT_TOKEN_DECIMALS = 6;
 
 export const DEFAULT_MINER_FEE = 3000n;
 export const DUST_LIMIT = 546n;

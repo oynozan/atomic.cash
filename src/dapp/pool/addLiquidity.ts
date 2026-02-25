@@ -16,6 +16,7 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
+    ensureTokenDecimals,
 } from "../common";
 
 import { DEFAULT_MINER_FEE } from "../config";
@@ -43,8 +44,11 @@ export async function addLiquidity(
     params: AddLiquidityParams,
     options: AddLiquidityOptions,
 ): Promise<AddLiquidityResult> {
-    const { tokenCategory, bchAmount, tokenAmount } = params;
+    const { tokenCategory, bchAmount, tokenAmount, tokenDecimals } = params;
     const { ownerTokenAddress } = options;
+
+    // Ensure token decimals are initialized before using tokenToOnChain / tokenFromOnChain.
+    await ensureTokenDecimals(tokenCategory, tokenDecimals);
 
     // At least one must be provided
     if (bchAmount === undefined && tokenAmount === undefined) {

@@ -58,6 +58,11 @@ export async function getPoolsByAddress(userAddress: string): Promise<PoolSummar
         if (!utxo.token) continue;
 
         const metadata = await fetchTokenMetadata(utxo.token.category);
+        const decimals = metadata?.decimals;
+        if (typeof decimals === "number") {
+            // keep conversion helpers in sync with BCMR decimals
+            await ensureTokenDecimals(utxo.token.category, decimals);
+        }
 
         const bchReserve = satoshiToBch(utxo.satoshis);
         const tokenReserve = tokenFromOnChain(utxo.token.amount, utxo.token.category);
@@ -105,13 +110,16 @@ export async function getUserBalances(userTokenAddress: string): Promise<UserBal
 
     for (const [category, amountRaw] of tokenMap) {
         const metadata = await fetchTokenMetadata(category);
-        const decimals = metadata?.decimals ?? 8;
+        const decimals = metadata?.decimals;
+        if (typeof decimals === "number") {
+            await ensureTokenDecimals(category, decimals);
+        }
 
         tokens.push({
             category,
             symbol: metadata?.symbol,
             name: metadata?.name,
-            decimals,
+            decimals: decimals ?? 0,
             amount: tokenFromOnChain(amountRaw, category),
             amountRaw,
             iconUrl: metadata?.iconUrl,
@@ -150,13 +158,16 @@ export async function getUserTokenBalance(
     }
 
     const metadata = await fetchTokenMetadata(tokenCategory);
-    const decimals = metadata?.decimals ?? 8;
+    const decimals = metadata?.decimals;
+    if (typeof decimals === "number") {
+        await ensureTokenDecimals(tokenCategory, decimals);
+    }
 
     return {
         category: tokenCategory,
         symbol: metadata?.symbol,
         name: metadata?.name,
-        decimals,
+        decimals: decimals ?? 0,
         amount: tokenFromOnChain(amountRaw, tokenCategory),
         amountRaw,
         iconUrl: metadata?.iconUrl,

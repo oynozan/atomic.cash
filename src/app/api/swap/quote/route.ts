@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
     try {
         // 1. Find best pool via router.ts; if none, fall back to best single pool
         let poolOwnerPkhHex: string | null = null;
+        let poolAddress: string | null = null;
 
         const shouldUseRouter =
             normalizedSwapType === SwapType.EXACT_INPUT &&
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
 
             if (!routeResult.noRouteFound && routeResult.bestRoute) {
                 poolOwnerPkhHex = routeResult.bestRoute.poolOwnerPkhHex;
+                poolAddress = routeResult.bestRoute.poolAddress;
             }
         }
 
@@ -88,6 +90,7 @@ export async function POST(request: NextRequest) {
                 );
             }
             poolOwnerPkhHex = bestPool.poolOwnerPkhHex;
+            poolAddress = bestPool.poolAddress;
         }
 
         const poolOwnerPkh = hexToBin(poolOwnerPkhHex);
@@ -115,6 +118,10 @@ export async function POST(request: NextRequest) {
             success: true,
             direction,
             swapType: normalizedSwapType,
+            pool: {
+                ownerPkhHex: poolOwnerPkhHex,
+                address: poolAddress,
+            },
             quote: {
                 inputAmount: quote.inputAmount,
                 outputAmount: quote.outputAmount,

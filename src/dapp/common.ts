@@ -36,6 +36,8 @@ const electrumNetwork = NETWORK_STRING as "mainnet" | "testnet4" | "chipnet";
 
 type ElectrumWithRequest = NetworkProvider & {
     performRequest: (method: string, ...params: unknown[]) => Promise<unknown>;
+    connect: () => Promise<void>;
+    disconnect: () => Promise<boolean>;
 };
 
 function createFailoverElectrumProvider(): NetworkProvider {
@@ -43,31 +45,23 @@ function createFailoverElectrumProvider(): NetworkProvider {
         return new ElectrumNetworkProvider(electrumNetwork);
     }
 
-    const providers: Array<{
-        instance: ElectrumWithRequest;
-        performRequest: ElectrumWithRequest["performRequest"];
-    }> = ELECTRUM_ENDPOINTS.map(endpoint => {
-        const instance = new ElectrumNetworkProvider(electrumNetwork, {
+    const providers: ElectrumWithRequest[] = ELECTRUM_ENDPOINTS.map(endpoint => {
+        return new ElectrumNetworkProvider(electrumNetwork, {
             hostname: endpoint.host,
         }) as ElectrumWithRequest;
-
-        return {
-            instance,
-            performRequest: instance.performRequest.bind(instance),
-        };
     });
 
     let currentIndex = 0;
 
-    async function performWithFailover(method: string, ...params: unknown[]): Promise<unknown> {
+    async function withFailover<T>(fn: (provider: ElectrumWithRequest) => Promise<T>): Promise<T> {
         let lastError: unknown;
 
         for (let i = 0; i < providers.length; i++) {
             const index = (currentIndex + i) % providers.length;
-            const { performRequest } = providers[index];
+            const provider = providers[index];
 
             try {
-                const result = await performRequest(method, ...params);
+                const result = await fn(provider);
                 currentIndex = index;
                 return result;
             } catch (error) {
@@ -79,11 +73,47 @@ function createFailoverElectrumProvider(): NetworkProvider {
         throw lastError ?? new Error("All Electrum endpoints failed");
     }
 
-    // Patch the first provider instance to route all low-level Electrum
-    // calls through the failover-aware performRequest implementation.
-    providers[0].instance.performRequest = performWithFailover;
+    const failoverProvider: ElectrumWithRequest = {
+        network: electrumNetwork,
+        async getUtxos(address: string): Promise<Utxo[]> {
+            return withFailover(provider => provider.getUtxos(address));
+        },
+        async getBlockHeight(): Promise<number> {
+            return withFailover(provider => provider.getBlockHeight());
+        },
+        async getRawTransaction(txid: string): Promise<string> {
+            return withFailover(provider => provider.getRawTransaction(txid));
+        },
+        async sendRawTransaction(txHex: string): Promise<string> {
+            return withFailover(provider => provider.sendRawTransaction(txHex));
+        },
+        async performRequest(method: string, ...params: unknown[]): Promise<unknown> {
+            return withFailover(provider => provider.performRequest(method, ...params));
+        },
+        async connect(): Promise<void> {
+            await withFailover(provider => provider.connect());
+        },
+        async disconnect(): Promise<boolean> {
+            let disconnected = false;
+            let lastError: unknown;
 
-    return providers[0].instance;
+            for (const provider of providers) {
+                try {
+                    disconnected = (await provider.disconnect()) || disconnected;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            if (!disconnected && lastError) {
+                throw lastError;
+            }
+
+            return disconnected;
+        },
+    };
+
+    return failoverProvider;
 }
 
 export const provider: NetworkProvider = createFailoverElectrumProvider();
@@ -138,11 +168,17 @@ export function setTokenDecimals(tokenCategory: string, decimals: number): void 
 }
 
 /**
- * Get token decimal value from central cache (or default).
+ * Get token decimal value from central cache.
+ * IMPORTANT: ensureTokenDecimals() or setTokenDecimals() MUST be called before this.
  */
 export function getTokenDecimals(tokenCategory: string): number {
     const cached = cache.get<number>(`${TOKEN_DECIMALS_CACHE_PREFIX}${tokenCategory}`);
-    return cached ?? DEFAULT_TOKEN_DECIMALS;
+    if (cached === undefined) {
+        throw new Error(
+            `Token decimals not initialized for ${tokenCategory}. Call ensureTokenDecimals() or setTokenDecimals() first.`,
+        );
+    }
+    return cached;
 }
 
 /**
@@ -160,10 +196,15 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
 
         const data = await response.json();
 
+        const decimals: number =
+            typeof data.token?.decimals === "number"
+                ? data.token.decimals
+                : DEFAULT_TOKEN_DECIMALS;
+
         const metadata: TokenMetadata = {
             name: data.name || "Unknown",
             symbol: data.token?.symbol || "UNKNOWN",
-            decimals: data.token?.decimals ?? DEFAULT_TOKEN_DECIMALS,
+            decimals,
             category: tokenCategory,
             iconUrl: data.uris?.icon,
             description: data.description,
@@ -195,7 +236,13 @@ export async function ensureTokenDecimals(
     if (cached !== undefined) return cached;
 
     const metadata = await fetchTokenMetadata(tokenCategory);
-    return metadata?.decimals ?? DEFAULT_TOKEN_DECIMALS;
+    if (!metadata || typeof metadata.decimals !== "number") {
+        throw new Error(
+            `Token metadata for ${tokenCategory} is missing decimals – cannot derive human amounts.`,
+        );
+    }
+    setTokenDecimals(tokenCategory, metadata.decimals);
+    return metadata.decimals;
 }
 
 /**

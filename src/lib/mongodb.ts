@@ -7,6 +7,7 @@ let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
 
 declare global {
+    // eslint-disable-next-line no-var
     var __mongodbClientPromise: Promise<MongoClient> | undefined;
 }
 
@@ -73,3 +74,4 @@ export async function getTransactionsCollection() {
     const db = await getDb();
     return db.collection<StoredTransaction>(COLLECTION_TRANSACTIONS);
 }
+

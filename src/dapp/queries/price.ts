@@ -8,15 +8,28 @@ import {
     getInputPrice,
     getOutputPrice,
     calculatePriceImpact,
+    bytesToHex,
 } from "../common";
+import type { Utxo } from "cashscript";
+import { cache } from "@/lib/cache";
 
 import { SwapDirection, SwapType } from "../types";
 import type { PriceQuote, PriceInfo, GetPriceParams, GetQuoteParams } from "./types";
 
+const POOL_UTXO_CACHE_TTL_MS = 10_000;
+
 async function getPoolUtxo(poolOwnerPkh: Uint8Array, tokenCategory: string) {
+    const key = `poolUtxo:${bytesToHex(poolOwnerPkh)}:${tokenCategory}`;
+    const cached = cache.get<Utxo | null>(key);
+    if (cached !== undefined) {
+        return cached;
+    }
+
     const contract = getExchangeContract(poolOwnerPkh);
     const utxos = await contract.getUtxos();
-    return utxos.find(u => u.token?.category === tokenCategory);
+    const utxo = utxos.find(u => u.token?.category === tokenCategory) ?? null;
+    cache.set<Utxo | null>(key, utxo, POOL_UTXO_CACHE_TTL_MS);
+    return utxo;
 }
 /**
  * Get current price

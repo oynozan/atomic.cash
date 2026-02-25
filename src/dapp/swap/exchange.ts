@@ -22,6 +22,7 @@ import {
     filterTokenUtxos,
     bytesToHex,
     toTokenAddress,
+    ensureTokenDecimals,
 } from "../common";
 
 import { SwapDirection, SwapType } from "../types";
@@ -81,6 +82,9 @@ export async function swapExactBchForTokens(
 
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
+
+    // Ensure token decimals are initialized before using tokenToOnChain / tokenFromOnChain.
+    await ensureTokenDecimals(tokenCategory);
 
     const bchAmountRaw = bchToSatoshi(bchAmount);
 
@@ -240,6 +244,8 @@ export async function swapBchForExactTokens(
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
 
+    await ensureTokenDecimals(tokenCategory);
+
     const tokenAmountRaw = tokenToOnChain(tokenAmount, tokenCategory);
 
     const { contractTokenAddress, poolUtxo } = await getPoolUtxo(poolOwnerPkh, tokenCategory);
@@ -397,6 +403,8 @@ export async function swapExactTokensForBch(
 
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
+
+    await ensureTokenDecimals(tokenCategory);
 
     const tokenAmountRaw = tokenToOnChain(tokenAmount, tokenCategory);
 
@@ -583,6 +591,8 @@ export async function swapTokensForExactBch(
 
     const { poolOwnerPkh, userAddress } = options;
     const tokenAddress = toTokenAddress(userAddress);
+
+    await ensureTokenDecimals(tokenCategory);
 
     const bchAmountRaw = bchToSatoshi(bchAmount);
 
