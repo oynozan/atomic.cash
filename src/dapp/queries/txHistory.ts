@@ -19,8 +19,8 @@ function normalizeAddress(address: string): string | null {
  *
  * - Uses Electrum address history
  * - Returns the newest N txids (no pagination – intended for UI overviews)
- * - Script / contract etkileşimleri, `/api/portfolio/history` tarafında
- *   Mongo dapp kayıtları ile txid bazında zaten ayrıştırılıyor.
+ * - Script/contract interactions are already separated by txid on
+ *   `/api/portfolio/history` using Mongo dapp records.
  */
 export async function getTxHistory(params: GetTxHistoryParams): Promise<TxHistoryResult> {
     const { address, limit = 5 } = params;

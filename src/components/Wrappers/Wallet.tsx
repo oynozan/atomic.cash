@@ -171,13 +171,13 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
         }
 
         try {
-            // Sadece aktif bir WC2 oturumu varsa disconnect çağır
+            // Only call disconnect if there is an active WC2 session
             if (provider.session) {
                 await provider.disconnect();
             }
         } catch (err) {
-            // Bazı durumlarda UniversalProvider "Please call connect() before enable()" hatası atabiliyor;
-            // burada sessizce yutuyoruz çünkü UI tarafında zaten adresi temizleyeceğiz.
+            // In some cases UniversalProvider may throw "Please call connect() before enable()";
+            // we swallow it here because we will clear the address on the UI side anyway.
             console.error("[wallet] provider.disconnect failed", err);
         } finally {
             setAddress(null);

@@ -57,13 +57,13 @@ export default function PortfolioTable({ showViewAllLink = true }: { showViewAll
     }
   }
 
-  // BCH her zaman en üstte, sonra en büyük bakiyeye sahip tokenlar
+  // BCH always at the top, then tokens by largest balance
   const bchRow = rows.find((r) => r.type === "bch");
   const tokenRows = rows
     .filter((r) => r.type === "token")
     .sort((a, b) => b.amount - a.amount);
 
-  // Overview kartında BCH + tüm tokenlar gösterilsin
+  // Show BCH + all tokens on the overview card
   const visibleTokens = tokenRows;
   const tokenCount = tokenRows.length + (bchRow ? 1 : 0);
 

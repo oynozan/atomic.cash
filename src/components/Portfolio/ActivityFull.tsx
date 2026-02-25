@@ -115,7 +115,7 @@ export default function PortfolioActivityFull() {
     [dappTxs],
   );
 
-  // Token metadata (symbol + icon) çek
+  // Fetch token metadata (symbol + icon)
   useEffect(() => {
     let cancelled = false;
 
@@ -139,7 +139,7 @@ export default function PortfolioActivityFull() {
             },
           ]);
         } catch {
-          // metadata hatalarını sessizce yut
+          // Swallow metadata errors silently
         }
       }
 
