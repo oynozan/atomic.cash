@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, ExternalLink } from "lucide-react";
 import { getExplorerUrl } from "@/dapp/explorer";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
+import { formatBchPrice } from "@/lib/utils";
 
 type StoredTrade = {
     txid: string;
@@ -48,10 +49,12 @@ export default function TokenDetailTradeHistory({
     tokenCategory,
     tokenSymbol,
     tokenIconUrl,
+    refreshKey = 0,
 }: {
     tokenCategory: string;
     tokenSymbol?: string;
     tokenIconUrl?: string;
+    refreshKey?: number;
 }) {
     const [data, setData] = useState<TradesResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -83,7 +86,7 @@ export default function TokenDetailTradeHistory({
         return () => {
             cancelled = true;
         };
-    }, [tokenCategory]);
+    }, [tokenCategory, refreshKey]);
 
     const trades = data?.trades ?? [];
 
@@ -182,7 +185,7 @@ export default function TokenDetailTradeHistory({
                                             />
                                         </div>
                                         <span className="font-mono text-[11px]">
-                                            {bchAmount != null ? formatNumber(bchAmount, 8) : "–"}{" "}
+                                            {bchAmount != null ? formatBchPrice(bchAmount) : "–"}{" "}
                                             BCH
                                         </span>
                                     </div>

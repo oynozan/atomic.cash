@@ -11,6 +11,7 @@ import {
     tokenFromOnChain,
     tokenToOnChain,
     ensureTokenDecimals,
+    getTokenToBchExactInputOutput,
 } from "../common";
 import { getRegisteredOwners } from "../queries/registry";
 import type { RouteQuote, BestRouteResult, SplitRouteResult } from "./types";
@@ -211,8 +212,8 @@ export async function findBestRouteForTokenToBch(
             // Does the pool have enough tokens?
             if (tokenAmountRaw >= poolTokens) continue;
 
-            // Calculate output
-            const bchOut = getInputPrice(tokenAmountRaw, poolTokens, poolBch);
+            // Calculate output using the same invariant as the on-chain contract
+            const bchOut = getTokenToBchExactInputOutput(tokenAmountRaw, poolTokens, poolBch);
             const bchOutHuman = satoshiToBch(bchOut);
 
             // Price impact

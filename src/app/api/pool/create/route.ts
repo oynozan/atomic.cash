@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPool } from "@/dapp/pool/create";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { registerPoolOwner } from "@/dapp/queries/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +67,15 @@ export async function POST(request: NextRequest) {
 
         if (!result.success || !result.unsignedTx) {
             return NextResponse.json(
+                // @ts-expect-error - result.error is not typed
                 { error: result.error ?? "Failed to build create-pool transaction" },
                 { status: 400 },
             );
         }
+
+        // Ensure pool owner is registered in Mongo so routing & stats can see this owner,
+        // even if the frontend later fails to make an explicit registry call.
+        await registerPoolOwner(result.unsignedTx.poolOwnerPkhHex, ownerTokenAddress.trim());
 
         const wcTransactionJson = templateToWcTransactionObject(result.unsignedTx, {
             broadcast: false,

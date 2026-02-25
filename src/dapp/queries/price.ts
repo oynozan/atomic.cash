@@ -9,6 +9,7 @@ import {
     getOutputPrice,
     calculatePriceImpact,
     bytesToHex,
+    getTokenToBchExactInputOutput,
 } from "../common";
 import type { Utxo } from "cashscript";
 import { cache } from "@/lib/cache";
@@ -134,7 +135,7 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
 
         if (swapType === SwapType.EXACT_INPUT) {
             inputAmountRaw = tokenToOnChain(amount, tokenCategory);
-            outputAmountRaw = getInputPrice(inputAmountRaw, poolTokens, poolBch);
+            outputAmountRaw = getTokenToBchExactInputOutput(inputAmountRaw, poolTokens, poolBch);
         } else {
             outputAmountRaw = bchToSatoshi(amount);
             inputAmountRaw = getOutputPrice(outputAmountRaw, poolTokens, poolBch);

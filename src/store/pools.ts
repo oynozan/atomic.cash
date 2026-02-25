@@ -60,6 +60,8 @@ export const usePoolsStore = create<PoolsState>((set, get) => ({
     },
 
     invalidate: () => {
-        set({ fetchedAt: null });
+        // Clear cached data and timestamp so the next caller
+        // is forced to refetch from /api/pools.
+        set({ data: null, error: null, fetchedAt: null });
     },
 }));

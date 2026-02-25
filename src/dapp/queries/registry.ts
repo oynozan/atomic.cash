@@ -2,7 +2,7 @@ import { hexToBin } from "@bitauth/libauth";
 import { getExchangeContract, satoshiToBch, tokenFromOnChain, fetchTokenMetadata } from "../common";
 import { getPoolOwnersCollection } from "@/lib/mongodb";
 import type { RegisteredPoolOwner, AllPoolsResult, PoolSummary } from "./types";
-import { getOrSet } from "@/lib/cache";
+import { cache, getOrSet } from "@/lib/cache";
 
 const ALL_POOLS_CACHE_KEY = "registry:all-pools";
 // Pool liquidity and counts do not need sub-second accuracy,
@@ -21,14 +21,18 @@ export async function registerPoolOwner(
 ): Promise<void> {
     const col = await getPoolOwnersCollection();
     const existing = await col.findOne({ pkhHex });
-    if (existing) return;
+    if (!existing) {
+        await col.insertOne({
+            pkhHex,
+            address,
+            label,
+            registeredAt: Date.now(),
+        });
+    }
 
-    await col.insertOne({
-        pkhHex,
-        address,
-        label,
-        registeredAt: Date.now(),
-    });
+    // Invalidate cached pool lists so new pools for this owner
+    // are visible immediately after registration.
+    cache.delete(ALL_POOLS_CACHE_KEY);
 }
 
 /**
@@ -49,6 +53,8 @@ export async function registerPoolOwners(
             });
         }
     }
+
+    cache.delete(ALL_POOLS_CACHE_KEY);
 }
 
 /**

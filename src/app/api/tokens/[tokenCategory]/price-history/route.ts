@@ -12,7 +12,9 @@ type PriceHistoryResponse = {
     points: PricePoint[];
 };
 
-function extractInitialPrice(tx: { amounts?: { bchIn?: number; tokenIn?: number } }): number | null {
+function extractInitialPrice(tx: {
+    amounts?: { bchIn?: number; tokenIn?: number };
+}): number | null {
     const a = tx.amounts;
     if (!a) return null;
     if (
@@ -114,7 +116,9 @@ export async function GET(
             .toArray();
 
         if (initialTx.length > 0) {
-            const p0 = extractInitialPrice(initialTx[0] as { amounts?: { bchIn?: number; tokenIn?: number } });
+            const p0 = extractInitialPrice(
+                initialTx[0] as { amounts?: { bchIn?: number; tokenIn?: number } },
+            );
             if (p0 != null && Number.isFinite(p0) && p0 > 0) {
                 points.push({ timestamp: initialTx[0]!.createdAt, priceBch: p0 });
             }

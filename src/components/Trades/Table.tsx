@@ -59,6 +59,8 @@ export default function TradesTable() {
     const [data, setData] = useState<TradesResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const PAGE_SIZE = 20;
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     useEffect(() => {
         let cancelled = false;
@@ -89,6 +91,9 @@ export default function TradesTable() {
 
     const trades = data?.trades ?? [];
     const tokenMeta = data?.tokenMeta ?? {};
+
+    const visibleTrades = trades.slice(0, visibleCount);
+    const hasMore = trades.length > visibleCount;
 
     if (loading && !data) {
         return (
@@ -144,7 +149,7 @@ export default function TradesTable() {
             </div>
 
             <div className="divide-y divide-border/40">
-                {trades.map(tx => {
+                {visibleTrades.map(tx => {
                     const meta = tx.tokenCategory ? tokenMeta[tx.tokenCategory] : undefined;
                     const isBuy = tx.direction === "bch_to_token";
 
@@ -243,6 +248,18 @@ export default function TradesTable() {
                     );
                 })}
             </div>
+
+            {hasMore && (
+                <button
+                    type="button"
+                    onClick={() =>
+                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, trades.length))
+                    }
+                    className="mt-2 self-center inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
+                >
+                    Load more
+                </button>
+            )}
         </div>
     );
 }

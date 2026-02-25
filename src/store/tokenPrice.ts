@@ -11,6 +11,7 @@ type TokenPriceState = {
         tokenCategory: string,
     ) => Promise<{ hasMarketPools: boolean; marketPrice: number } | null>;
     getCached: (tokenCategory: string) => { hasMarketPools: boolean; marketPrice: number } | null;
+    invalidate: (tokenCategory?: string) => void;
 };
 
 export const useTokenPriceStore = create<TokenPriceState>((set, get) => ({
@@ -49,5 +50,14 @@ export const useTokenPriceStore = create<TokenPriceState>((set, get) => ({
         const entry = get().cache[tokenCategory];
         if (!entry || Date.now() - entry.fetchedAt >= PRICE_TTL_MS) return null;
         return { hasMarketPools: entry.hasMarketPools, marketPrice: entry.marketPrice };
+    },
+
+    invalidate: (tokenCategory?: string) => {
+        set(state => {
+            if (!tokenCategory) return { cache: {} };
+            const next = { ...state.cache };
+            delete next[tokenCategory];
+            return { cache: next };
+        });
     },
 }));

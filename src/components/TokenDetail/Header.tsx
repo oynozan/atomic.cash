@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { formatBchPrice } from "@/lib/utils";
 
 export type TokenDetailHeaderData = {
     symbol?: string;
@@ -10,16 +11,6 @@ export type TokenDetailHeaderData = {
     change1dPercent: number | null;
     change7dPercent: number | null;
 };
-
-function formatBch(n: number | null): string {
-    if (n == null || !Number.isFinite(n)) return "–";
-    if (Math.abs(n) < 0.00000001) return "0";
-    const fixed = n.toFixed(8);
-    const [intPart, decPart] = fixed.split(".");
-    const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    const dec = (decPart || "").replace(/0+$/, "");
-    return dec ? `${intWithSep}.${dec}` : intWithSep;
-}
 
 export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderData }) {
     const rawChange = data.change1dPercent ?? data.change7dPercent ?? null;
@@ -55,7 +46,7 @@ export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderDat
             </div>
             <div className="flex items-center gap-3">
                 <span className="text-xl font-semibold text-foreground">
-                    {formatBch(data.priceBch)} BCH
+                    {formatBchPrice(data.priceBch)} BCH
                 </span>
                 {hasChange && (
                     <span

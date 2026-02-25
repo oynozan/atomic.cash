@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
+import { formatBchPrice } from "@/lib/utils";
 
 type Point = { timestamp: number; priceBch: number };
 
@@ -17,19 +18,14 @@ const RANGES = [
     { key: "30d", label: "1M" },
 ] as const;
 
-function formatPrice(n: number): string {
-    if (!Number.isFinite(n)) return "–";
-    if (n >= 1) return n.toFixed(2);
-    if (n >= 0.01) return n.toFixed(4);
-    return n.toFixed(6);
-}
-
 export default function PriceChart({
     tokenCategory,
     currentPrice,
+    refreshKey = 0,
 }: {
     tokenCategory: string;
     currentPrice: number | null;
+    refreshKey?: number;
 }) {
     const [range, setRange] = useState<"24h" | "7d" | "30d">("30d");
     const [data, setData] = useState<PriceHistoryResponse | null>(null);
@@ -68,29 +64,53 @@ export default function PriceChart({
         return () => {
             cancelled = true;
         };
-    }, [tokenCategory, range]);
+    }, [tokenCategory, range, refreshKey]);
 
     const { path, minPrice, maxPrice, viewBox } = useMemo(() => {
         const points = data?.points ?? [];
         const w = 400;
         const h = 120;
 
-        // Hiç geçmiş yoksa veya sadece tek nokta (sadece initial price)
-        // varsa grafik çizmeyelim; "No price data" gösterelim.
+        // Hiç trade yoksa (veya tek nokta) ama geçerli bir currentPrice varsa,
+        // düz bir hat çizelim; böylece "ölü" tokenler bile sabit fiyatlı grafik gösterir.
         if (!points.length || points.length < 2) {
             const p = currentPrice ?? 0;
+            if (!Number.isFinite(p) || p <= 0) {
+                return {
+                    path: "",
+                    minPrice: 0,
+                    maxPrice: 0,
+                    viewBox: `0 0 ${w} ${h}`,
+                };
+            }
+
+            const spanP = Math.abs(p) * 0.1 || 1e-8;
+            const loP = Math.max(0, p - spanP);
+            const hiP = p + spanP;
+            const rangeP = hiP - loP || 1e-12;
+            const y = h - ((p - loP) / rangeP) * h;
+            const d = `M 0 ${y} L ${w} ${y}`;
+
             return {
-                path: "",
-                minPrice: p,
-                maxPrice: p,
+                path: d,
+                minPrice: loP,
+                maxPrice: hiP,
                 viewBox: `0 0 ${w} ${h}`,
             };
         }
 
-        const minT = Math.min(...points.map(x => x.timestamp));
-        const maxT = Math.max(...points.map(x => x.timestamp));
-        const minP = Math.min(...points.map(x => x.priceBch));
-        const maxP = Math.max(...points.map(x => x.priceBch));
+        // Son nokta olarak güncel spot fiyatı ekle: çizgi son swap'ın execution fiyatında
+        // (küçük işlemde düşük kalabilir) değil, piyasa fiyatında biter.
+        const now = Date.now();
+        const withNow =
+            typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0
+                ? [...points, { timestamp: now, priceBch: currentPrice }]
+                : points;
+
+        const minT = Math.min(...withNow.map(x => x.timestamp));
+        const maxT = Math.max(...withNow.map(x => x.timestamp));
+        const minP = Math.min(...withNow.map(x => x.priceBch));
+        const maxP = Math.max(...withNow.map(x => x.priceBch));
         const spanT = maxT - minT || 1;
 
         // Keep price axis strictly positive and with sensible range
@@ -102,7 +122,7 @@ export default function PriceChart({
         const hiP = baseMax + padP;
         const rangeP = hiP - loP || 1e-12;
 
-        const d = points
+        const d = withNow
             .map(
                 (pt, i) =>
                     `${i === 0 ? "M" : "L"} ${((pt.timestamp - minT) / spanT) * w} ${h - ((pt.priceBch - loP) / rangeP) * h}`,
@@ -147,8 +167,8 @@ export default function PriceChart({
             ) : (
                 <div className="flex gap-4">
                     <div className="flex flex-col justify-between text-[11px] text-muted-foreground">
-                        <span>{formatPrice(maxPrice)}</span>
-                        <span>{formatPrice(minPrice)}</span>
+                        <span>{formatBchPrice(maxPrice)}</span>
+                        <span>{formatBchPrice(minPrice)}</span>
                     </div>
                     <div className="flex-1 min-w-0 overflow-hidden">
                         {path ? (

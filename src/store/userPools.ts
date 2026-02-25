@@ -46,25 +46,31 @@ export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
             return entry.data;
         }
 
-        set(state => ({
-            loading: { ...state.loading, [key]: true },
-            error: { ...state.error, [key]: null },
-        }));
+        const hasEntry = !!entry;
+        const silentRefresh = force && hasEntry;
+
+        if (!silentRefresh) {
+            set(state => ({
+                loading: { ...state.loading, [key]: true },
+                error: { ...state.error, [key]: null },
+            }));
+        }
 
         try {
             const url = `/api/user/pools?address=${encodeURIComponent(address)}`;
-            const data = await fetchJsonOnce<UserPoolsResponse>(url);
+            const fetchOptions: RequestInit = force || !entry ? { cache: "no-store" } : {};
+            const data = await fetchJsonOnce<UserPoolsResponse>(url, fetchOptions);
             set(state => ({
                 byAddress: { ...state.byAddress, [key]: { data, fetchedAt: Date.now() } },
-                loading: { ...state.loading, [key]: false },
                 error: { ...state.error, [key]: null },
+                loading: silentRefresh ? state.loading : { ...state.loading, [key]: false },
             }));
             return data;
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to load your pools";
             set(state => ({
-                loading: { ...state.loading, [key]: false },
                 error: { ...state.error, [key]: msg },
+                loading: silentRefresh ? state.loading : { ...state.loading, [key]: false },
             }));
             return null;
         }
@@ -87,9 +93,7 @@ export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
             const entry = state.byAddress[address];
             if (!entry) return state;
 
-            const nextPools = entry.data.pools.filter(
-                pool => pool.poolAddress !== poolAddress,
-            );
+            const nextPools = entry.data.pools.filter(pool => pool.poolAddress !== poolAddress);
 
             if (nextPools.length === entry.data.pools.length) {
                 return state;
@@ -111,4 +115,3 @@ export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
         });
     },
 }));
-

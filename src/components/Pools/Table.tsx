@@ -3,12 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { formatBchPrice } from "@/lib/utils";
 import { usePoolsStore, type ApiPool } from "@/store/pools";
 import { getAddressExplorerUrl } from "@/dapp/explorer";
 
+const PAGE_SIZE = 10;
+
 function formatNumber(n: number, maxDecimals = 4): string {
     if (!Number.isFinite(n)) return "-";
-    const fixed = n.toFixed(maxDecimals);
+    const abs = Math.abs(n);
+    let decimals = maxDecimals;
+    // Küçük değerler için daha fazla, büyükler için daha az hassasiyet:
+    // < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (veya verilen üst sınır).
+    if (abs > 0 && abs < 0.01) decimals = Math.min(8, maxDecimals + 4);
+    else if (abs < 1) decimals = Math.min(6, maxDecimals + 2);
+    else decimals = Math.min(4, maxDecimals);
+
+    const fixed = n.toFixed(decimals);
     const [intPart, decPart] = fixed.split(".");
     const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     const dec = (decPart || "").replace(/0+$/, "");
@@ -18,6 +29,7 @@ function formatNumber(n: number, maxDecimals = 4): string {
 export default function PoolsTable() {
     const { data, loading, error, fetch: fetchPools } = usePoolsStore();
     const [expandedToken, setExpandedToken] = useState<string | null>(null);
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     useEffect(() => {
         fetchPools();
@@ -57,6 +69,13 @@ export default function PoolsTable() {
 
         return Array.from(map.values()).sort((a, b) => b.totalBch - a.totalBch);
     }, [data]);
+
+    const visibleGroups = useMemo(
+        () => grouped.slice(0, visibleCount),
+        [grouped, visibleCount],
+    );
+
+    const hasMore = grouped.length > visibleCount;
 
     if (loading) {
         return (
@@ -98,7 +117,7 @@ export default function PoolsTable() {
                 </div>
             </div>
 
-            {grouped.map(group => (
+            {visibleGroups.map(group => (
                 <TokenGroupRow
                     key={group.tokenCategory}
                     group={group}
@@ -110,6 +129,18 @@ export default function PoolsTable() {
                     }
                 />
             ))}
+
+            {hasMore && (
+                <button
+                    type="button"
+                    onClick={() =>
+                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, grouped.length))
+                    }
+                    className="self-center mt-2 inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
+                >
+                    Load more
+                </button>
+            )}
         </div>
     );
 }
@@ -150,8 +181,15 @@ function TokenGroupRow({
     onToggle: () => void;
 }) {
     const tokenLabel = group.tokenSymbol ?? group.tokenCategory.slice(0, 8) + "…";
+    // Use same BCH-weighted average as Tokens page so price is consistent across app
+    const priceNum = group.pools.reduce((s, p) => s + p.tokenPriceInBch * p.bchReserve, 0);
+    const priceDen = group.totalBch;
     const priceTokenInBch =
-        group.totalToken > 0 ? group.totalBch / group.totalToken : group.pools[0]?.tokenPriceInBch;
+        priceDen > 0 && Number.isFinite(priceNum / priceDen)
+            ? priceNum / priceDen
+            : group.totalToken > 0
+              ? group.totalBch / group.totalToken
+              : (group.pools[0]?.tokenPriceInBch ?? undefined);
     const priceBchInToken =
         priceTokenInBch && priceTokenInBch > 0 ? 1 / priceTokenInBch : undefined;
 
@@ -177,7 +215,7 @@ function TokenGroupRow({
                             <span>
                                 1 {tokenLabel} ≈{" "}
                                 <span className="font-mono">
-                                    {priceTokenInBch ? formatNumber(priceTokenInBch, 8) : "-"} BCH
+                                    {priceTokenInBch ? formatBchPrice(priceTokenInBch) : "-"} BCH
                                 </span>
                             </span>
                             <span className="opacity-60">·</span>
@@ -241,8 +279,7 @@ function TokenGroupRow({
                                             rel="noreferrer"
                                             className="text-[11px] text-primary hover:underline"
                                         >
-                                            Pool address:{" "}
-                                            {pool.poolAddress.slice(0, 6)}…
+                                            Pool address: {pool.poolAddress.slice(0, 6)}…
                                             {pool.poolAddress.slice(-6)}
                                         </a>
                                     </div>

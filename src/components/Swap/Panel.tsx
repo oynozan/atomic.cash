@@ -8,6 +8,7 @@ import ConnectWallet from "@/components/Header/Connect";
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { formatBchPrice, roundBch } from "@/lib/utils";
 import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
@@ -35,6 +36,10 @@ type SwapQuote = {
 };
 
 const QUOTE_REFRESH_INTERVAL_MS = 20_000;
+
+type SwapPanelProps = {
+    onSwapCompleted?: () => void;
+};
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -169,7 +174,8 @@ function TokenSelectModal({
     );
 }
 
-export default function SwapPanel() {
+export default function SwapPanel(props: SwapPanelProps) {
+    const { onSwapCompleted } = props;
     const { address, isConnected, session, provider } = useWalletSession();
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -251,9 +257,7 @@ export default function SwapPanel() {
         if (!urlToken) return;
         const found = tokens.find(t => t.category === urlToken);
         if (found) {
-            setSelectedToken(prev =>
-                prev && prev.category === found.category ? prev : found,
-            );
+            setSelectedToken(prev => (prev && prev.category === found.category ? prev : found));
         } else {
             toast.error("No pool found for the requested token.");
             setSelectedToken(null);
@@ -339,7 +343,8 @@ export default function SwapPanel() {
         activeAmountNumber > 0 &&
         !validationError &&
         !!hasValidQuote &&
-        !isQuoting;
+        !isQuoting &&
+        !txLoading;
 
     // Periodically refresh quote for the current amount to keep prices fresh,
     // similar to popular DEX UIs (e.g. ~20s interval).
@@ -348,12 +353,14 @@ export default function SwapPanel() {
         if (!hasValidQuote) return;
         if (!isConnected || !address) return;
         if (!activeAmountNumber) return;
+        if (txLoading) return;
 
         let cancelled = false;
 
         const intervalId = setInterval(() => {
             if (cancelled) return;
             if (isQuoting) return;
+            if (txLoading) return;
 
             const value = parseFloat(activeAmount);
             if (!Number.isFinite(value) || value <= 0) return;
@@ -416,7 +423,8 @@ export default function SwapPanel() {
                     if (data.pool && typeof data.pool.ownerPkhHex === "string") {
                         setActivePool({
                             ownerPkhHex: data.pool.ownerPkhHex,
-                            address: typeof data.pool.address === "string" ? data.pool.address : null,
+                            address:
+                                typeof data.pool.address === "string" ? data.pool.address : null,
                         });
                     } else {
                         setActivePool(null);
@@ -455,6 +463,7 @@ export default function SwapPanel() {
         direction,
         swapType,
         slippage,
+        txLoading,
     ]);
 
     const inputLabel = direction === "bch_to_token" ? "You pay" : "You pay (token)";
@@ -465,16 +474,28 @@ export default function SwapPanel() {
     const outputTokenLabel =
         direction === "bch_to_token" ? (selectedToken?.symbol ?? "Select token") : "BCH";
 
-    // Load spot price for selected token (cached in store, 60s TTL)
+    // Spot price: prefer page data (same BCH-weighted price as header/chart). Only call price
+    // endpoint when page didn't provide price (e.g. token from list without detail). This avoids
+    // redundant request and prevents overwriting with a different/lower-precision value.
     const fetchPrice = useTokenPriceStore(s => s.fetchPrice);
     useEffect(() => {
         if (!selectedToken) {
             setSpotPrice(null);
             return;
         }
+        const pagePrice =
+            typeof selectedToken.priceBch === "number" && selectedToken.priceBch > 0
+                ? selectedToken.priceBch
+                : null;
+        if (pagePrice != null) {
+            setSpotPrice(roundBch(pagePrice));
+            return;
+        }
         let cancelled = false;
         fetchPrice(selectedToken.category).then(result => {
-            if (!cancelled) setSpotPrice(result?.marketPrice ?? null);
+            if (!cancelled && result?.marketPrice != null) {
+                setSpotPrice(roundBch(result.marketPrice));
+            }
         });
         return () => {
             cancelled = true;
@@ -497,6 +518,11 @@ export default function SwapPanel() {
         const rawAmount = lastEdited === "input" ? inputAmount : outputAmount;
         const value = parseFloat(rawAmount);
         if (!Number.isFinite(value) || value <= 0) return;
+
+        // Stop any in-flight quote while we build/sign the swap TX.
+        quoteAbortRef.current?.abort();
+        quoteAbortRef.current = null;
+        setIsQuoting(false);
 
         setTxLoading(true);
         try {
@@ -534,7 +560,9 @@ export default function SwapPanel() {
             const { signWcTransaction } = await import("@/lib/web3");
             const signResult = await signWcTransaction(wcObj, provider);
             if (!signResult?.signedTransaction) {
-                throw new Error("Transaction signing failed or was rejected.");
+                // User closed/cancelled in wallet – treat as graceful cancel, not error.
+                toast.info("Swap cancelled in your wallet.");
+                return;
             }
 
             const broadcastRes = await fetch("/api/tx/broadcast", {
@@ -556,8 +584,9 @@ export default function SwapPanel() {
             );
 
             if (txid) {
-                // Fire-and-forget: record this swap in Mongo for detailed activity view
-                void fetch("/api/portfolio/transactions", {
+                // Record swap in Mongo so trade history and activity show it.
+                // Await so that onSwapCompleted() refetch sees the new trade.
+                await fetch("/api/portfolio/transactions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -567,8 +596,6 @@ export default function SwapPanel() {
                         direction,
                         tokenCategory: selectedToken.category,
                         amounts: {
-                            // For now we only persist human-readable amounts;
-                            // they are sufficient for the Activity summary.
                             ...(direction === "bch_to_token"
                                 ? { bchIn: value, tokenOut: data.outputAmount }
                                 : { tokenIn: value, bchOut: data.outputAmount }),
@@ -587,6 +614,9 @@ export default function SwapPanel() {
             setEffectivePrice(null);
             setLastEdited("input");
             setActivePool(null);
+
+            // Notify parent so token detail page can refresh price, chart, and trade history.
+            onSwapCompleted?.();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed to swap");
         } finally {
@@ -601,6 +631,12 @@ export default function SwapPanel() {
             setPriceImpact(null);
             setEffectivePrice(null);
             setActivePool(null);
+            return;
+        }
+
+        // While a swap transaction is being built/signed/broadcast,
+        // don't fire new quote requests.
+        if (txLoading) {
             return;
         }
 
@@ -723,7 +759,7 @@ export default function SwapPanel() {
             quoteAbortRef.current = null;
             if (timeoutId) clearTimeout(timeoutId);
         };
-    }, [direction, swapType, lastEdited, activeAmount, slippage, selectedToken]);
+    }, [direction, swapType, lastEdited, activeAmount, slippage, selectedToken, txLoading]);
 
     return (
         <div id="swap-panel" className="w-full max-w-120">
@@ -753,6 +789,7 @@ export default function SwapPanel() {
                                 setQuote(null);
                                 setPriceImpact(null);
                                 setEffectivePrice(null);
+                                setActivePool(null);
                             }}
                             className="mt-2 w-full border-0 bg-transparent text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
@@ -815,6 +852,7 @@ export default function SwapPanel() {
                                 setQuote(null);
                                 setPriceImpact(null);
                                 setEffectivePrice(null);
+                                setActivePool(null);
                             };
 
                             return (
@@ -877,6 +915,7 @@ export default function SwapPanel() {
                                     setQuote(null);
                                     setPriceImpact(null);
                                     setEffectivePrice(null);
+                                    setActivePool(null);
                                 }}
                                 className="mt-2 w-full border-0 bg-transparent text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
@@ -1001,8 +1040,7 @@ export default function SwapPanel() {
                                     selectedToken.priceBch > 0
                                         ? selectedToken.priceBch
                                         : null;
-                                const spot =
-                                    spotPrice && spotPrice > 0 ? spotPrice : overviewPrice;
+                                const spot = spotPrice && spotPrice > 0 ? spotPrice : overviewPrice;
 
                                 if (quote) {
                                     const rawEff =
@@ -1017,19 +1055,19 @@ export default function SwapPanel() {
                                         const bchPerToken =
                                             direction === "bch_to_token" ? rawEff : 1 / rawEff;
                                         if (Number.isFinite(bchPerToken) && bchPerToken > 0) {
-                                            return formatNumber(bchPerToken, 8);
+                                            return formatBchPrice(roundBch(bchPerToken));
                                         }
                                     }
 
                                     // Degenerate quote (e.g. output ~0) → show spot price instead of "-"
                                     if (spot) {
-                                        return formatNumber(spot, 8);
+                                        return formatBchPrice(spot);
                                     }
                                     return "-";
                                 }
 
                                 if (spot) {
-                                    return formatNumber(spot, 8);
+                                    return formatBchPrice(spot);
                                 }
                                 return "-";
                             })()}{" "}

@@ -104,11 +104,13 @@ export default function CreatePoolPage() {
     const tokenCategory = selectedToken?.category ?? "";
     const fetchTokenPrice = useTokenPriceStore(s => s.fetchPrice);
     useEffect(() => {
-        if (!tokenCategory) {
-            setHasMarketPools(false);
-            setMarketPrice(null);
-            return;
-        }
+        // Reset state immediately when token changes to avoid showing
+        // stale market info from the previously selected token.
+        setHasMarketPools(false);
+        setMarketPrice(null);
+
+        if (!tokenCategory) return;
+
         let cancelled = false;
         fetchTokenPrice(tokenCategory).then(result => {
             if (cancelled) return;
@@ -153,13 +155,33 @@ export default function CreatePoolPage() {
         };
     }, [address, tokenCategory, fetchUserPools]);
 
+    /** Wait until the new pool appears in the user's pools (for redirect to manage). */
+    async function waitForNewUserPool(
+        userAddress: string,
+        tokenCategory: string,
+        maxAttempts = 8,
+        delayMs = 1000,
+    ) {
+        const trimmed = tokenCategory.trim();
+        if (!trimmed || !userAddress) return;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const data = await fetchUserPools(userAddress, true);
+            if (data?.pools?.some(p => p.tokenCategory === trimmed)) {
+                return;
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!isConnected || !address || !session) {
             toast.error("Please connect your wallet first.");
             return;
         }
-        if (!tokenCategory.trim()) {
+        const trimmedTokenCategory = tokenCategory.trim();
+        if (!trimmedTokenCategory) {
             toast.error("Select a token from your balance.");
             return;
         }
@@ -217,7 +239,7 @@ export default function CreatePoolPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    tokenCategory: tokenCategory.trim(),
+                    tokenCategory: trimmedTokenCategory,
                     bchAmount: bch,
                     tokenAmount: token,
                     useMarketPrice: shouldUseMarketPrice || undefined,
@@ -260,7 +282,7 @@ export default function CreatePoolPage() {
                         txid,
                         address,
                         type: "create_pool",
-                        tokenCategory: tokenCategory.trim(),
+                        tokenCategory: trimmedTokenCategory,
                         amounts: {
                             bchIn: bch,
                             tokenIn: token,
@@ -271,29 +293,21 @@ export default function CreatePoolPage() {
                 });
             }
 
-            const registerRes = await fetch("/api/registry/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    pkhHex: data.poolOwnerPkhHex,
-                    address,
-                }),
-            });
-            if (!registerRes.ok) {
-                const regData = await registerRes.json().catch(() => ({}));
-                toast.warning(
-                    regData?.error ??
-                        "Pool created but failed to add to list. You can still use the pool.",
-                );
-            }
-
             toast.success("Pool created successfully!");
             usePoolsStore.getState().invalidate();
             useTokensOverviewStore.getState().invalidate();
             if (address) {
                 invalidateUserPools(address);
             }
-            router.push("/pools");
+
+            // Wait until the new pool appears in "My Liquidity Pools" so the manage page shows it.
+            try {
+                await waitForNewUserPool(address ?? "", trimmedTokenCategory);
+            } catch {
+                // Non-fatal: still redirect; manage page will refetch with cache bypass.
+            }
+
+            router.push("/pools/manage");
         } catch (err) {
             toast.error(formatError(err));
         } finally {

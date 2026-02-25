@@ -13,8 +13,8 @@ export const ELECTRUM_ENDPOINTS: { host: string }[] =
         ? [{ host: "bitcoincash.network" }]
         : [
               // Prefer imaginary.cash when chipnet.bch.ninja is down
-              { host: "chipnet.imaginary.cash" },
               { host: "chipnet.bch.ninja" },
+              { host: "chipnet.imaginary.cash" },
           ];
 
 export const ADDRESS_PREFIX: "bitcoincash" | "bchtest" =

@@ -11,6 +11,8 @@ type VolumeStatsResponse = {
     volume30dBch: number;
     prev30dBch: number;
     tvlBch: number;
+    prev24hTvlBch: number;
+    prev30dTvlBch: number;
 };
 
 function extractBchVolume(tx: StoredTransaction): number {
@@ -71,10 +73,47 @@ export async function GET() {
             }
         }
 
-        // TVL: sum of BCH reserves across all pools.
+        // TVL: sum of BCH reserves across all pools (current).
         // Reuse getAllPools which already has its own caching.
         const allPools = await getAllPools();
-        const tvlBch = allPools.pools.reduce((sum, pool) => sum + pool.bchReserve, 0);
+        // DeFi standard: TVL includes both sides of the pool.
+        // Each side is worth the same in BCH, so TVL in BCH ≈ 2 * BCH reserve.
+        const tvlBch = allPools.pools.reduce((sum, pool) => sum + pool.bchReserve * 2, 0);
+        // Approximate historical TVL from liquidity actions (create/add/remove).
+        // Swaps are ignored here; TVL is treated as LP liquidity only.
+        const liquidityTxs = await coll
+            .find({
+                type: { $in: ["create_pool", "add_liquidity", "remove_liquidity"] },
+                createdAt: { $gte: prev30Start },
+            })
+            .toArray();
+
+        let netChangeLast24 = 0;
+        let netChangeLast30 = 0;
+
+        for (const tx of liquidityTxs) {
+            const a = tx.amounts;
+            if (!a) continue;
+            let delta = 0;
+            if (tx.type === "create_pool" || tx.type === "add_liquidity") {
+                const b = a.bchIn;
+                if (typeof b === "number" && Number.isFinite(b) && b > 0) delta = b;
+            } else if (tx.type === "remove_liquidity") {
+                const b = a.bchOut;
+                if (typeof b === "number" && Number.isFinite(b) && b > 0) delta = -b;
+            }
+            if (!delta) continue;
+
+            if (tx.createdAt >= last24Start) {
+                netChangeLast24 += delta;
+            }
+            if (tx.createdAt >= last30Start) {
+                netChangeLast30 += delta;
+            }
+        }
+
+        const prev24hTvlBch = tvlBch - netChangeLast24;
+        const prev30dTvlBch = tvlBch - netChangeLast30;
 
         const body: VolumeStatsResponse = {
             volume24hBch,
@@ -82,6 +121,8 @@ export async function GET() {
             volume30dBch,
             prev30dBch,
             tvlBch,
+            prev24hTvlBch,
+            prev30dTvlBch,
         };
 
         return NextResponse.json(body);

@@ -78,7 +78,9 @@ export async function GET() {
                 volume30dBch: 0,
             };
 
-            existing.tvlBch += pool.bchReserve;
+            // DeFi standard: TVL includes both BCH and token side.
+            // Each side worth the same in BCH → approx 2 * BCH reserve.
+            existing.tvlBch += pool.bchReserve * 2;
             // weight token price by BCH liquidity
             existing.priceNum += pool.tokenPriceInBch * pool.bchReserve;
             existing.priceDen += pool.bchReserve;

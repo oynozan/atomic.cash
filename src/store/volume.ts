@@ -11,6 +11,8 @@ export type VolumeResponse = {
     volume30dBch: number;
     prev30dBch: number;
     tvlBch: number;
+    prev24hTvlBch: number;
+    prev30dTvlBch: number;
 };
 
 type VolumeState = {

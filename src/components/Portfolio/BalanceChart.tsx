@@ -5,6 +5,7 @@ import {
     usePortfolioBalanceHistoryStore,
     type BalanceHistoryResponse,
 } from "@/store/portfolioBalanceHistory";
+import { formatBchAmount } from "@/lib/utils";
 
 const RANGES = [
     { key: "24h", label: "1D", ms: 24 * 60 * 60 * 1000 },
@@ -12,13 +13,6 @@ const RANGES = [
     { key: "30d", label: "1M", ms: 30 * 24 * 60 * 60 * 1000 },
     { key: "90d", label: "3M", ms: 90 * 24 * 60 * 60 * 1000 },
 ] as const;
-
-function formatBch(n: number): string {
-    if (!Number.isFinite(n)) return "–";
-    if (n >= 1) return n.toFixed(2);
-    if (n >= 0.01) return n.toFixed(4);
-    return n.toFixed(6);
-}
 
 export default function PortfolioBalanceChart({
     address,
@@ -100,10 +94,7 @@ export default function PortfolioBalanceChart({
         // a flat line across the full width instead of a tiny triangle.
         const points =
             filtered.length === 1
-                ? [
-                      { ...filtered[0], timestamp: filtered[0].timestamp - 1 },
-                      filtered[0],
-                  ]
+                ? [{ ...filtered[0], timestamp: filtered[0].timestamp - 1 }, filtered[0]]
                 : filtered;
 
         const minT = Math.min(...points.map(x => x.timestamp));
@@ -167,8 +158,8 @@ export default function PortfolioBalanceChart({
             ) : (
                 <div className="flex gap-4">
                     <div className="flex flex-col justify-between text-[11px] text-muted-foreground">
-                        <span>{formatBch(maxVal)} BCH</span>
-                        <span>{formatBch(minVal)} BCH</span>
+                        <span>{formatBchAmount(maxVal)} BCH</span>
+                        <span>{formatBchAmount(minVal)} BCH</span>
                     </div>
                     <div className="flex-1 min-w-0 overflow-hidden">
                         {path ? (

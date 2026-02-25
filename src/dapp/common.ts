@@ -89,7 +89,8 @@ function createFailoverElectrumProvider(): NetworkProvider {
 
     // Patch the first provider instance to route all low-level Electrum
     // calls through the failover-aware performRequest implementation.
-    providers[0].instance.performRequest = performWithFailover as ElectrumWithRequest["performRequest"];
+    providers[0].instance.performRequest =
+        performWithFailover as ElectrumWithRequest["performRequest"];
 
     return providers[0].instance;
 }
@@ -175,9 +176,7 @@ export async function fetchTokenMetadata(tokenCategory: string): Promise<TokenMe
         const data = await response.json();
 
         const decimals: number =
-            typeof data.token?.decimals === "number"
-                ? data.token.decimals
-                : DEFAULT_TOKEN_DECIMALS;
+            typeof data.token?.decimals === "number" ? data.token.decimals : DEFAULT_TOKEN_DECIMALS;
 
         const metadata: TokenMetadata = {
             name: data.name || "Unknown",
@@ -442,6 +441,36 @@ export function getOutputPrice(
     const numerator = inputReserve * outputAmount * 1000n;
     const denominator = (outputReserve - outputAmount) * 997n;
     return numerator / denominator + 1n;
+}
+
+/**
+ * Token -> BCH (exact token input) output that is guaranteed to satisfy the
+ * on-chain contract invariant for swapExactInput, where the 0.3% LP fee is
+ * charged on the BCH "trade value".
+ *
+ * Derived from:
+ *   (B - (1003/1000) * x) * (T + ΔT) >= B * T
+ * where:
+ *   B  = poolBch (satoshis)
+ *   T  = poolTokens
+ *   ΔT = token input
+ *   x  = BCH sent out to the user (satoshis)
+ *
+ * Solving for x gives:
+ *   x <= (1000 / 1003) * B * ΔT / (T + ΔT)
+ *
+ * We compute the integer floor of this bound using bigint math.
+ */
+export function getTokenToBchExactInputOutput(
+    tokenInput: bigint,
+    poolTokens: bigint,
+    poolBch: bigint,
+): bigint {
+    if (tokenInput <= 0n || poolTokens <= 0n || poolBch <= 0n) return 0n;
+    const num = 1000n * poolBch * tokenInput;
+    const den = 1003n * (poolTokens + tokenInput);
+    if (den === 0n) return 0n;
+    return num / den;
 }
 
 /**

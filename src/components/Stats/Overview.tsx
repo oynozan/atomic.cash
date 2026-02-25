@@ -3,16 +3,7 @@
 import { useEffect } from "react";
 import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
 import { useVolumeStore } from "@/store/volume";
-
-function formatBch(n: number): string {
-    if (!Number.isFinite(n)) return "-";
-    if (Math.abs(n) < 0.000001) return "0";
-    const fixed = n.toFixed(6);
-    const [intPart, decPart] = fixed.split(".");
-    const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    const dec = (decPart || "").replace(/0+$/, "");
-    return dec ? `${intWithSep}.${dec}` : intWithSep;
-}
+import { formatBchAmount } from "@/lib/utils";
 
 function formatPercentChange(
     current: number,
@@ -41,11 +32,15 @@ export default function StatsOverview() {
     const loading = volumeLoading;
     const error = volumeError;
     const tvlBch = volumeData?.tvlBch ?? 0;
+    const prev24Tvl = volumeData?.prev24hTvlBch ?? 0;
+    const prev30Tvl = volumeData?.prev30dTvlBch ?? 0;
     const vol24 = volumeData?.volume24hBch ?? 0;
     const prev24 = volumeData?.prev24hBch ?? 0;
     const vol30 = volumeData?.volume30dBch ?? 0;
     const prev30 = volumeData?.prev30dBch ?? 0;
 
+    const changeTvl24 = formatPercentChange(tvlBch, prev24Tvl);
+    const changeTvl30 = formatPercentChange(tvlBch, prev30Tvl);
     const change24 = formatPercentChange(vol24, prev24);
     const change30 = formatPercentChange(vol30, prev30);
 
@@ -65,15 +60,81 @@ export default function StatsOverview() {
                 <div className="rounded-[24px] border bg-popover px-5 py-4 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>TVL</span>
-                        <Info className="size-3.5" />
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total value locked across all pools (BCH value of BCH + token reserves)."
+                            title="Total value locked across all pools (BCH value of BCH + token reserves)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
                     </div>
                     <div className="text-2xl font-semibold text-foreground">
                         {showPlaceholder ? (
                             "…"
                         ) : (
                             <>
-                                {formatBch(tvlBch)}{" "}
+                                {formatBchAmount(tvlBch)}{" "}
                                 <span className="text-sm text-muted-foreground">BCH</span>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-1 text-xs mt-1 min-h-9">
+                        {showPlaceholder ? (
+                            <span className="text-muted-foreground">…</span>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-1">
+                                    {prev24Tvl > 0 && changeTvl24.label !== "–" ? (
+                                        <>
+                                            {changeTvl24.positive ? (
+                                                <ArrowUpRight className="size-3 text-emerald-400" />
+                                            ) : (
+                                                <ArrowDownRight className="size-3 text-red-400" />
+                                            )}
+                                            <span
+                                                className={
+                                                    changeTvl24.positive
+                                                        ? "text-emerald-400"
+                                                        : "text-red-400"
+                                                }
+                                            >
+                                                {changeTvl24.label} (
+                                                {formatBchAmount(tvlBch - prev24Tvl)} BCH)
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                                vs previous 24h
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            – vs previous 24h
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {prev30Tvl > 0 && changeTvl30.label !== "–" ? (
+                                        <>
+                                            {changeTvl30.positive ? (
+                                                <ArrowUpRight className="size-3 text-emerald-400" />
+                                            ) : (
+                                                <ArrowDownRight className="size-3 text-red-400" />
+                                            )}
+                                            <span
+                                                className={
+                                                    changeTvl30.positive
+                                                        ? "text-emerald-400"
+                                                        : "text-red-400"
+                                                }
+                                            >
+                                                {changeTvl30.label} (
+                                                {formatBchAmount(tvlBch - prev30Tvl)} BCH)
+                                            </span>
+                                            <span className="text-muted-foreground">vs 30d ago</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-muted-foreground">– vs 30d ago</span>
+                                    )}
+                                </div>
                             </>
                         )}
                     </div>
@@ -83,14 +144,20 @@ export default function StatsOverview() {
                 <div className="rounded-[24px] border bg-popover px-5 py-4 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>Volume (24h)</span>
-                        <Info className="size-3.5" />
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total swap volume in the last 24 hours (counting BCH side)."
+                            title="Total swap volume in the last 24 hours (counting BCH side)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
                     </div>
                     <div className="text-2xl font-semibold text-foreground">
                         {showPlaceholder ? (
                             "…"
                         ) : (
                             <>
-                                {formatBch(vol24)}{" "}
+                                {formatBchAmount(vol24)}{" "}
                                 <span className="text-sm text-muted-foreground">BCH</span>
                             </>
                         )}
@@ -123,14 +190,20 @@ export default function StatsOverview() {
                 <div className="rounded-[24px] border bg-popover px-5 py-4 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>Volume (30d)</span>
-                        <Info className="size-3.5" />
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total swap volume in the last 30 days (counting BCH side)."
+                            title="Total swap volume in the last 30 days (counting BCH side)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
                     </div>
                     <div className="text-2xl font-semibold text-foreground">
                         {showPlaceholder ? (
                             "…"
                         ) : (
                             <>
-                                {formatBch(vol30)}{" "}
+                                {formatBchAmount(vol30)}{" "}
                                 <span className="text-sm text-muted-foreground">BCH</span>
                             </>
                         )}

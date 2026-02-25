@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowUpRight, ExternalLink, Globe, Database } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Globe, Database, Info } from "lucide-react";
 import { getTokenExplorerUrl } from "@/dapp/explorer";
+import { formatBchAmount, formatBchCompact } from "@/lib/utils";
 
 type TokenDetailInfoData = {
     tokenCategory: string;
@@ -15,15 +16,6 @@ type TokenDetailInfoData = {
     prev30dBch: number;
     websiteUrl?: string;
 };
-
-function formatBch(n: number): string {
-    if (!Number.isFinite(n)) return "–";
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-    if (n >= 1) return n.toFixed(2);
-    if (n >= 0.01) return n.toFixed(4);
-    return n.toFixed(6);
-}
 
 function formatChange(current: number, prev: number): string {
     if (!Number.isFinite(prev) || prev === 0) return "–";
@@ -86,20 +78,38 @@ export default function TokenDetailInfo({
 
             <div className="space-y-4">
                 <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">TVL</div>
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1">
+                        <span>TVL</span>
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total value locked in all pools for this token (BCH value of BCH + token reserves)."
+                            title="Total value locked in all pools for this token (BCH value of BCH + token reserves)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
+                    </div>
                     <div className="text-xl font-semibold text-foreground">
-                        {formatBch(data.tvlBch)} BCH
+                        {formatBchAmount(data.tvlBch)} BCH
                     </div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
-                        {formatBch(data.tvlBch / 2)} BCH · {formatBch(data.tokenReserveTotal)}{" "}
+                        {formatBchAmount(data.tvlBch / 2)} BCH · {formatBchCompact(data.tokenReserveTotal)}{" "}
                         {data.symbol ?? "token"}
                     </div>
                 </div>
 
                 <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">Volume (24h)</div>
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1">
+                        <span>Volume (24h)</span>
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total swap volume for this token in the last 24 hours (counting BCH side)."
+                            title="Total swap volume for this token in the last 24 hours (counting BCH side)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
+                    </div>
                     <div className="text-xl font-semibold text-foreground">
-                        {formatBch(data.volume24hBch)} BCH
+                        {formatBchAmount(data.volume24hBch)} BCH
                     </div>
                     {data.prev24hBch > 0 && (
                         <div
@@ -117,9 +127,18 @@ export default function TokenDetailInfo({
                 </div>
 
                 <div>
-                    <div className="text-[11px] text-muted-foreground mb-1">Volume (30d)</div>
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1">
+                        <span>Volume (30d)</span>
+                        <span
+                            className="inline-flex items-center justify-center rounded-full border border-border/60 px-1 py-0.5 cursor-default"
+                            aria-label="Total swap volume for this token in the last 30 days (counting BCH side)."
+                            title="Total swap volume for this token in the last 30 days (counting BCH side)."
+                        >
+                            <Info className="size-3 opacity-70" />
+                        </span>
+                    </div>
                     <div className="text-xl font-semibold text-foreground">
-                        {formatBch(data.volume30dBch)} BCH
+                        {formatBchAmount(data.volume30dBch)} BCH
                     </div>
                     {data.prev30dBch > 0 && (
                         <div

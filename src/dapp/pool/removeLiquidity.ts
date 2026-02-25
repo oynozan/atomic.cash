@@ -119,11 +119,6 @@ export async function removeLiquidity(
         return createErrorResult("Pool does not have enough liquidity!");
     }
 
-    // Ratio check
-    if (!withdrawAll && remainingTokens > 0n) {
-        return createErrorResult("Pool must have enough liquidity!");
-    }
-
     // For fee, add BCH UTXOs
     // Use token-aware address when fetching UTXOs and creating token outputs
     const ownerTokenAddressTokenAware = toTokenAddress(ownerTokenAddress);

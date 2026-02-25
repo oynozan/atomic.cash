@@ -74,4 +74,3 @@ export async function getTransactionsCollection() {
     const db = await getDb();
     return db.collection<StoredTransaction>(COLLECTION_TRANSACTIONS);
 }
-

@@ -23,6 +23,7 @@ import {
     bytesToHex,
     toTokenAddress,
     ensureTokenDecimals,
+    getTokenToBchExactInputOutput,
 } from "../common";
 
 import { SwapDirection, SwapType } from "../types";
@@ -119,8 +120,9 @@ export async function swapExactBchForTokens(
         );
     }
 
-    // Fee and price
-    const feeAmount = Number(bchAmountRaw) * 0.003;
+    // Fee and price (0.3% of BCH input, in BCH)
+    const feeAmountRaw = (bchAmountRaw * 3n) / 1000n;
+    const feeAmount = satoshiToBch(feeAmountRaw);
     const priceImpact = calculatePriceImpact(bchAmountRaw, poolBch);
     const effectivePrice = bchAmount / tokensOutHuman;
 
@@ -286,7 +288,8 @@ export async function swapBchForExactTokens(
         );
     }
 
-    const feeAmount = Number(bchRequired) * 0.003;
+    const feeAmountRaw = (bchRequired * 3n) / 1000n;
+    const feeAmount = satoshiToBch(feeAmountRaw);
     const priceImpact = calculatePriceImpact(bchRequired, poolBch);
     const effectivePrice = bchRequiredHuman / tokenAmount;
 
@@ -420,8 +423,10 @@ export async function swapExactTokensForBch(
     const poolBch = poolUtxo.satoshis;
     const poolTokens = poolUtxo.token.amount;
 
-    // Calculate output
-    const bchOut = getInputPrice(tokenAmountRaw, poolTokens, poolBch);
+    // Calculate BCH output using the same invariant as the on-chain contract
+    // (0.3% LP fee on BCH trade value). This guarantees the resulting TX
+    // satisfies the script's K check without extra tweaking.
+    const bchOut = getTokenToBchExactInputOutput(tokenAmountRaw, poolTokens, poolBch);
     const bchOutHuman = satoshiToBch(bchOut);
 
     const minBchRaw =
@@ -437,7 +442,9 @@ export async function swapExactTokensForBch(
         );
     }
 
-    const feeAmount = Number(bchOut) * 0.003;
+    // Fee is 0.3% of token input, reported in token units
+    const feeAmountRaw = (tokenAmountRaw * 3n) / 1000n;
+    const feeAmount = tokenFromOnChain(feeAmountRaw, tokenCategory);
     const priceImpact = calculatePriceImpact(tokenAmountRaw, poolTokens);
     const effectivePrice = tokenAmount / bchOutHuman;
 
@@ -633,7 +640,9 @@ export async function swapTokensForExactBch(
         );
     }
 
-    const feeAmount = Number(bchAmountRaw) * 0.003;
+    // Fee is 0.3% of token input, reported in token units
+    const feeAmountRaw = (tokensRequired * 3n) / 1000n;
+    const feeAmount = tokenFromOnChain(feeAmountRaw, tokenCategory);
     const priceImpact = calculatePriceImpact(tokensRequired, poolTokens);
     const effectivePrice = tokensRequiredHuman / bchAmount;
 

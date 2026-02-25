@@ -71,7 +71,9 @@ export async function GET(
         let iconUrl: string | undefined;
 
         for (const p of pools) {
-            tvlBch += p.bchReserve;
+            // DeFi standard: TVL includes both BCH and token side.
+            // Each side worth the same in BCH → approx 2 * BCH reserve.
+            tvlBch += p.bchReserve * 2;
             tokenReserveTotal += p.tokenReserve;
             priceNum += p.tokenPriceInBch * p.bchReserve;
             priceDen += p.bchReserve;

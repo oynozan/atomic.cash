@@ -98,9 +98,12 @@ export async function getUserBalances(userTokenAddress: string): Promise<UserBal
     const tokenMap = new Map<string, bigint>();
 
     for (const utxo of utxos) {
-        bchRaw += utxo.satoshis;
-
-        if (utxo.token) {
+        // Only count pure BCH UTXOs towards the BCH balance.
+        // BCH locked inside token UTXOs (e.g. 1000 sat dust) is treated as part
+        // of the token position, not as spendable BCH balance.
+        if (!utxo.token) {
+            bchRaw += utxo.satoshis;
+        } else {
             const existing = tokenMap.get(utxo.token.category) || 0n;
             tokenMap.set(utxo.token.category, existing + utxo.token.amount);
         }

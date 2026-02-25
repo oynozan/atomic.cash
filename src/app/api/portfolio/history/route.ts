@@ -27,24 +27,38 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = request.nextUrl.searchParams.get("limit");
+    const cursorParam = request.nextUrl.searchParams.get("cursor");
 
-    const limit = limitParam ? Number.parseInt(limitParam, 10) || 10 : 10;
+    const limit = Math.min(
+        Math.max(limitParam ? Number.parseInt(limitParam, 10) || 20 : 20, 1),
+        100,
+    );
+    const cursor = cursorParam ? Number.parseInt(cursorParam, 10) : undefined;
 
     const trimmedAddress = address.trim();
 
     try {
-        // 1) Dapp transactions from Mongo (sorted by createdAt desc)
         const coll = await getTransactionsCollection();
 
+        const filter: { address: string; createdAt?: { $lt: number } } = {
+            address: trimmedAddress,
+        };
+        if (cursor != null && !Number.isNaN(cursor)) {
+            filter.createdAt = { $lt: cursor };
+        }
+
         const dappDocs: StoredTransaction[] = await coll
-            .find({ address: trimmedAddress })
+            .find(filter)
             .sort({ createdAt: -1 })
-            .limit(limit)
+            .limit(limit + 1)
             .toArray();
 
-        // Collect lightweight token metadata for all categories present
+        const hasMore = dappDocs.length > limit;
+        const page = hasMore ? dappDocs.slice(0, limit) : dappDocs;
+        const nextCursor = page.length > 0 ? page[page.length - 1].createdAt : undefined;
+
         const categories = Array.from(
-            new Set(dappDocs.map(tx => tx.tokenCategory).filter((c): c is string => !!c)),
+            new Set(page.map(tx => tx.tokenCategory).filter((c): c is string => !!c)),
         );
 
         const tokenMeta: Record<string, TokenMeta> = {};
@@ -65,9 +79,10 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             dapp: {
-                transactions: dappDocs,
-                total: dappDocs.length,
-                hasMore: false,
+                transactions: page,
+                total: page.length,
+                hasMore,
+                nextCursor: hasMore ? nextCursor : undefined,
             },
             tokenMeta: Object.keys(tokenMeta).length ? tokenMeta : undefined,
         });

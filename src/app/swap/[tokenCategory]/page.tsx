@@ -10,6 +10,7 @@ import TokenDetailInfo from "@/components/TokenDetail/Info";
 import { useEffect, useMemo, useState } from "react";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
+import { useTokenPriceStore } from "@/store/tokenPrice";
 
 type TokenDetailResponse = {
     tokenCategory: string;
@@ -33,6 +34,7 @@ export default function SwapTokenPage() {
     const [data, setData] = useState<TokenDetailResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     const overviewTokens = useTokensOverviewStore(s => s.data?.tokens ?? null);
     const overviewToken = useMemo(
@@ -71,7 +73,7 @@ export default function SwapTokenPage() {
         return () => {
             cancelled = true;
         };
-    }, [tokenCategory]);
+    }, [tokenCategory, reloadKey]);
 
     if (!tokenCategory) {
         return (
@@ -96,8 +98,7 @@ export default function SwapTokenPage() {
         );
     }
 
-    const view: TokenDetailResponse =
-        data ??
+    const view: TokenDetailResponse = data ??
         (overviewToken && {
             tokenCategory,
             symbol: overviewToken.symbol,
@@ -150,18 +151,30 @@ export default function SwapTokenPage() {
                         <TokenDetailPriceChart
                             tokenCategory={view.tokenCategory}
                             currentPrice={view.priceBch}
+                            refreshKey={reloadKey}
                         />
                         <TokenDetailTradeHistory
                             tokenCategory={view.tokenCategory}
                             tokenSymbol={view.symbol}
                             tokenIconUrl={view.iconUrl}
+                            refreshKey={reloadKey}
                         />
                     </div>
 
                     {/* Right column: swap + info */}
                     <div className="space-y-6">
                         <div className="rounded-[24px] border bg-popover p-5">
-                            <SwapPanel />
+                            <SwapPanel
+                                onSwapCompleted={() => {
+                                    setReloadKey(key => key + 1);
+                                    // So swap panel "Price" and header stay in sync
+                                    useTokenPriceStore
+                                        .getState()
+                                        .invalidate(tokenCategory ?? undefined);
+                                    useTokensOverviewStore.getState().invalidate();
+                                    void useTokensOverviewStore.getState().fetch(true);
+                                }}
+                            />
                         </div>
                         <TokenDetailInfo
                             data={{

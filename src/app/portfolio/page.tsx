@@ -12,12 +12,11 @@ export default function Portfolio() {
         <section className="w-screen pt-44 pb-32 flex justify-center">
             <PortfolioLayout active={tab} onChangeTab={setTab}>
                 <div className="space-y-4 min-h-[320px]">
-                    <div className={tab === "tokens" ? "" : "hidden"}>
+                    {tab === "tokens" ? (
                         <PortfolioTable showViewAllLink={false} />
-                    </div>
-                    <div className={tab === "activity" ? "" : "hidden"}>
+                    ) : (
                         <PortfolioActivityFull />
-                    </div>
+                    )}
                 </div>
             </PortfolioLayout>
         </section>

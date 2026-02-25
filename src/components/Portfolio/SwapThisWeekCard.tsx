@@ -1,11 +1,6 @@
 "use client";
 
-function formatBch(n: number): string {
-    if (!Number.isFinite(n)) return "0";
-    if (n >= 1) return n.toFixed(2);
-    if (n >= 0.01) return n.toFixed(4);
-    return n.toFixed(6);
-}
+import { formatBchAmount } from "@/lib/utils";
 
 export default function SwapThisWeekCard({
     swapsThisWeek,
@@ -24,7 +19,7 @@ export default function SwapThisWeekCard({
                 <div>
                     <div className="text-[11px] text-muted-foreground mb-1">Swapped this week</div>
                     <div className="text-xl font-semibold text-foreground">
-                        {formatBch(swappedThisWeekBch)} BCH
+                        {formatBchAmount(swappedThisWeekBch)} BCH
                     </div>
                 </div>
             </div>

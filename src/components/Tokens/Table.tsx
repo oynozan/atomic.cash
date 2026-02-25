@@ -3,13 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import {
-    useTokensOverviewStore,
-} from "@/store/tokensOverview";
+import { formatBchPrice } from "@/lib/utils";
+import { useTokensOverviewStore } from "@/store/tokensOverview";
 
 function formatNumber(n: number | null, maxDecimals = 6): string {
     if (n == null || !Number.isFinite(n)) return "-";
-    const fixed = n.toFixed(maxDecimals);
+    const abs = Math.abs(n);
+    let decimals = maxDecimals;
+    // Küçük BCH değerleri için daha fazla, büyükler için daha az hassasiyet:
+    // < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (veya verilen üst sınır).
+    if (abs > 0 && abs < 0.01) decimals = Math.min(8, maxDecimals + 2);
+    else if (abs < 1) decimals = Math.min(6, maxDecimals);
+    else decimals = Math.min(4, maxDecimals);
+
+    const fixed = n.toFixed(decimals);
     const [intPart, decPart] = fixed.split(".");
     const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     const dec = (decPart || "").replace(/0+$/, "");
@@ -28,7 +35,9 @@ function formatPercent(n: number | null): { label: string; positive: boolean } {
 export default function TokensTable() {
     const { data, loading, error, fetch: fetchTokens } = useTokensOverviewStore();
     const [search, setSearch] = useState("");
-    const [sortMode, setSortMode] = useState<"tvl" | "gainers" | "losers" | "volume">("tvl");
+    const [sortMode, setSortMode] = useState<
+        "tvl" | "priceAsc" | "priceDesc" | "gainers" | "losers" | "volume"
+    >("tvl");
 
     useEffect(() => {
         fetchTokens();
@@ -57,6 +66,10 @@ export default function TokensTable() {
         const sorted = [...list];
         if (sortMode === "tvl") {
             sorted.sort((a, b) => b.tvlBch - a.tvlBch);
+        } else if (sortMode === "priceAsc") {
+            sorted.sort((a, b) => (a.priceBch ?? 0) - (b.priceBch ?? 0));
+        } else if (sortMode === "priceDesc") {
+            sorted.sort((a, b) => (b.priceBch ?? 0) - (a.priceBch ?? 0));
         } else if (sortMode === "gainers") {
             sorted.sort((a, b) => {
                 const av = a.change1dPercent ?? -Infinity;
@@ -72,10 +85,18 @@ export default function TokensTable() {
         } else if (sortMode === "volume") {
             sorted.sort((a, b) => b.volume30dBch - a.volume30dBch);
         }
-
         return sorted;
     }, [tokens, search, sortMode]);
 
+    const PAGE_SIZE = 25;
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+    const visibleTokens = useMemo(
+        () => filteredTokens.slice(0, visibleCount),
+        [filteredTokens, visibleCount],
+    );
+
+    const hasMore = filteredTokens.length > visibleCount;
 
     if (loading && !tokens.length) {
         return (
@@ -117,6 +138,28 @@ export default function TokensTable() {
                             }`}
                         >
                             TVL
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("priceDesc")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "priceDesc"
+                                    ? "bg-amber-400 text-amber-950"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            Price ↑
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSortMode("priceAsc")}
+                            className={`px-2 py-0.5 rounded-full ${
+                                sortMode === "priceAsc"
+                                    ? "bg-amber-600 text-amber-50"
+                                    : "text-muted-foreground"
+                            }`}
+                        >
+                            Price ↓
                         </button>
                         <button
                             type="button"
@@ -175,7 +218,7 @@ export default function TokensTable() {
 
             {/* Rows */}
             <div className="divide-y divide-border/40">
-                {filteredTokens.map((t, idx) => {
+                {visibleTokens.map((t, idx) => {
                     const change1d = formatPercent(t.change1dPercent);
                     const change7d = formatPercent(t.change7dPercent);
 
@@ -209,7 +252,7 @@ export default function TokensTable() {
 
                             {/* Price */}
                             <div className="font-mono text-[11px]">
-                                {formatNumber(t.priceBch, 8)} BCH
+                                {formatBchPrice(t.priceBch)} BCH
                             </div>
 
                             {/* 1 day */}
@@ -267,6 +310,18 @@ export default function TokensTable() {
                     );
                 })}
             </div>
+
+            {hasMore && (
+                <button
+                    type="button"
+                    onClick={() =>
+                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filteredTokens.length))
+                    }
+                    className="mt-2 self-center inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
+                >
+                    Load more
+                </button>
+            )}
         </div>
     );
 }

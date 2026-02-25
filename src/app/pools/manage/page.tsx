@@ -538,7 +538,6 @@ function TokenAvatar({ symbol, iconUrl }: { symbol: string; iconUrl?: string }) 
 export default function ManagePoolsPage() {
     const { address, isConnected, session, provider } = useWalletSession();
     const fetchUserPools = useUserPoolsStore(s => s.fetch);
-    const invalidateUserPools = useUserPoolsStore(s => s.invalidate);
     const byAddress = useUserPoolsStore(s => s.byAddress);
     const removeUserPool = useUserPoolsStore(s => s.removePool);
     const loadingByAddress = useUserPoolsStore(s => s.loading);
@@ -554,9 +553,9 @@ export default function ManagePoolsPage() {
     const [removeAll, setRemoveAll] = useState(false);
     const [txLoading, setTxLoading] = useState(false);
 
-    const data = address ? byAddress[address]?.data ?? null : null;
-    const loading = address ? loadingByAddress[address] ?? false : false;
-    const error = address ? errorByAddress[address] ?? null : null;
+    const data = address ? (byAddress[address]?.data ?? null) : null;
+    const loading = address ? (loadingByAddress[address] ?? false) : false;
+    const error = address ? (errorByAddress[address] ?? null) : null;
 
     useEffect(() => {
         if (!isConnected || !address) return;
@@ -830,8 +829,14 @@ export default function ManagePoolsPage() {
                             onDone={() => {
                                 setActiveModal(null);
                                 if (address) {
-                                    invalidateUserPools(address);
-                                    void fetchUserPools(address, true);
+                                    // Force-refresh user pools, and retry once shortly after
+                                    // to account for Electrum propagation delays.
+                                    (async () => {
+                                        await fetchUserPools(address, true);
+                                        setTimeout(() => {
+                                            void fetchUserPools(address, true);
+                                        }, 1000);
+                                    })();
                                 }
                             }}
                         />
@@ -849,7 +854,24 @@ export default function ManagePoolsPage() {
                             setTxLoading={setTxLoading}
                             onDone={() => {
                                 if (address && activeModal?.pool) {
-                                    removeUserPool(address, activeModal.pool.poolAddress);
+                                    if (removeAll) {
+                                        // Full withdraw – pool is closed; silently refresh from backend
+                                        // to let the updated set of pools propagate.
+                                        (async () => {
+                                            await fetchUserPools(address, true);
+                                            setTimeout(() => {
+                                                void fetchUserPools(address, true);
+                                            }, 1000);
+                                        })();
+                                    } else {
+                                        // Partial withdraw – pool should remain, just refresh balances.
+                                        (async () => {
+                                            await fetchUserPools(address, true);
+                                            setTimeout(() => {
+                                                void fetchUserPools(address, true);
+                                            }, 1000);
+                                        })();
+                                    }
                                 }
                                 setActiveModal(null);
                             }}
