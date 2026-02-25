@@ -538,7 +538,9 @@ function TokenAvatar({ symbol, iconUrl }: { symbol: string; iconUrl?: string }) 
 export default function ManagePoolsPage() {
     const { address, isConnected, session, provider } = useWalletSession();
     const fetchUserPools = useUserPoolsStore(s => s.fetch);
+    const invalidateUserPools = useUserPoolsStore(s => s.invalidate);
     const byAddress = useUserPoolsStore(s => s.byAddress);
+    const removeUserPool = useUserPoolsStore(s => s.removePool);
     const loadingByAddress = useUserPoolsStore(s => s.loading);
     const errorByAddress = useUserPoolsStore(s => s.error);
 
@@ -599,7 +601,7 @@ export default function ManagePoolsPage() {
     if (!isConnected || !address) {
         return (
             <section className="w-screen pt-44 pb-32 flex justify-center">
-                <div className="home-container max-w-xl">
+                <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
                         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6"
@@ -623,7 +625,7 @@ export default function ManagePoolsPage() {
     if (isInitialLoading) {
         return (
             <section className="w-screen pt-44 pb-32 flex justify-center">
-                <div className="home-container max-w-xl">
+                <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
                         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6"
@@ -642,7 +644,7 @@ export default function ManagePoolsPage() {
     if (error) {
         return (
             <section className="w-screen pt-44 pb-32 flex justify-center">
-                <div className="home-container max-w-xl">
+                <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
                         className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6"
@@ -828,6 +830,7 @@ export default function ManagePoolsPage() {
                             onDone={() => {
                                 setActiveModal(null);
                                 if (address) {
+                                    invalidateUserPools(address);
                                     void fetchUserPools(address, true);
                                 }
                             }}
@@ -845,10 +848,10 @@ export default function ManagePoolsPage() {
                             txLoading={txLoading}
                             setTxLoading={setTxLoading}
                             onDone={() => {
-                                setActiveModal(null);
-                                if (address) {
-                                    void fetchUserPools(address, true);
+                                if (address && activeModal?.pool) {
+                                    removeUserPool(address, activeModal.pool.poolAddress);
                                 }
+                                setActiveModal(null);
                             }}
                         />
                     )}

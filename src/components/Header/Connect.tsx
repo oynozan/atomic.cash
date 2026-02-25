@@ -94,16 +94,27 @@ export default function ConnectWallet({ className }: { className?: string }) {
                         {label}
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="bottom" align="end" className="min-w-40">
+                <DropdownMenuContent side="bottom" align="end" className="min-w-40 cursor-pointer">
                     <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={event => {
+                            event.preventDefault();
+                            router.push("/pools/manage");
+                        }}
+                    >
+                        My Liquidity Pools
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        className="cursor-pointer"
                         onSelect={event => {
                             event.preventDefault();
                             router.push("/portfolio");
                         }}
                     >
-                        View portfolio
+                        View Portfolio
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                        className="cursor-pointer"
                         onSelect={event => {
                             event.preventDefault();
                             handleDisconnect();

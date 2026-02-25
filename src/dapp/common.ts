@@ -34,10 +34,11 @@ import { cache } from "../lib/cache";
 
 const electrumNetwork = NETWORK_STRING as "mainnet" | "testnet4" | "chipnet";
 
-type ElectrumWithRequest = NetworkProvider & {
-    performRequest: (method: string, ...params: unknown[]) => Promise<unknown>;
-    connect: () => Promise<void>;
-    disconnect: () => Promise<boolean>;
+type ElectrumWithRequest = ElectrumNetworkProvider & {
+    performRequest: (
+        name: string,
+        ...parameters: (string | number | boolean)[]
+    ) => Promise<unknown>;
 };
 
 function createFailoverElectrumProvider(): NetworkProvider {
@@ -45,23 +46,36 @@ function createFailoverElectrumProvider(): NetworkProvider {
         return new ElectrumNetworkProvider(electrumNetwork);
     }
 
-    const providers: ElectrumWithRequest[] = ELECTRUM_ENDPOINTS.map(endpoint => {
-        return new ElectrumNetworkProvider(electrumNetwork, {
+    // Create a separate ElectrumNetworkProvider instance for each endpoint and
+    // cache their original performRequest methods so we can rotate between them.
+    const providers: Array<{
+        instance: ElectrumWithRequest;
+        performRequest: ElectrumWithRequest["performRequest"];
+    }> = ELECTRUM_ENDPOINTS.map(endpoint => {
+        const instance = new ElectrumNetworkProvider(electrumNetwork, {
             hostname: endpoint.host,
         }) as ElectrumWithRequest;
+
+        return {
+            instance,
+            performRequest: instance.performRequest.bind(instance),
+        };
     });
 
     let currentIndex = 0;
 
-    async function withFailover<T>(fn: (provider: ElectrumWithRequest) => Promise<T>): Promise<T> {
+    async function performWithFailover(
+        method: string,
+        ...params: (string | number | boolean)[]
+    ): Promise<unknown> {
         let lastError: unknown;
 
         for (let i = 0; i < providers.length; i++) {
             const index = (currentIndex + i) % providers.length;
-            const provider = providers[index];
+            const { performRequest } = providers[index];
 
             try {
-                const result = await fn(provider);
+                const result = await performRequest(method, ...params);
                 currentIndex = index;
                 return result;
             } catch (error) {
@@ -73,47 +87,11 @@ function createFailoverElectrumProvider(): NetworkProvider {
         throw lastError ?? new Error("All Electrum endpoints failed");
     }
 
-    const failoverProvider: ElectrumWithRequest = {
-        network: electrumNetwork,
-        async getUtxos(address: string): Promise<Utxo[]> {
-            return withFailover(provider => provider.getUtxos(address));
-        },
-        async getBlockHeight(): Promise<number> {
-            return withFailover(provider => provider.getBlockHeight());
-        },
-        async getRawTransaction(txid: string): Promise<string> {
-            return withFailover(provider => provider.getRawTransaction(txid));
-        },
-        async sendRawTransaction(txHex: string): Promise<string> {
-            return withFailover(provider => provider.sendRawTransaction(txHex));
-        },
-        async performRequest(method: string, ...params: unknown[]): Promise<unknown> {
-            return withFailover(provider => provider.performRequest(method, ...params));
-        },
-        async connect(): Promise<void> {
-            await withFailover(provider => provider.connect());
-        },
-        async disconnect(): Promise<boolean> {
-            let disconnected = false;
-            let lastError: unknown;
+    // Patch the first provider instance to route all low-level Electrum
+    // calls through the failover-aware performRequest implementation.
+    providers[0].instance.performRequest = performWithFailover as ElectrumWithRequest["performRequest"];
 
-            for (const provider of providers) {
-                try {
-                    disconnected = (await provider.disconnect()) || disconnected;
-                } catch (error) {
-                    lastError = error;
-                }
-            }
-
-            if (!disconnected && lastError) {
-                throw lastError;
-            }
-
-            return disconnected;
-        },
-    };
-
-    return failoverProvider;
+    return providers[0].instance;
 }
 
 export const provider: NetworkProvider = createFailoverElectrumProvider();

@@ -82,11 +82,11 @@ export default function PortfolioBalanceChart({
 
     const { path, minVal, maxVal, viewBox } = useMemo(() => {
         const allPoints = data?.points ?? [];
-        const points = allPoints.filter(p => p.timestamp >= from);
+        const filtered = allPoints.filter(p => p.timestamp >= from);
         const w = 400;
         const h = 120;
 
-        if (points.length === 0) {
+        if (filtered.length === 0) {
             const v = allPoints.length > 0 ? allPoints[allPoints.length - 1]!.valueBch : 0;
             return {
                 path: "",
@@ -95,6 +95,16 @@ export default function PortfolioBalanceChart({
                 viewBox: `0 0 ${w} ${h}`,
             };
         }
+
+        // If we only have a single point in the selected range, synthesize
+        // a flat line across the full width instead of a tiny triangle.
+        const points =
+            filtered.length === 1
+                ? [
+                      { ...filtered[0], timestamp: filtered[0].timestamp - 1 },
+                      filtered[0],
+                  ]
+                : filtered;
 
         const minT = Math.min(...points.map(x => x.timestamp));
         const maxT = Math.max(...points.map(x => x.timestamp));

@@ -29,6 +29,7 @@ type UserPoolsState = {
     error: Record<string, string | null>;
     fetch: (address: string, force?: boolean) => Promise<UserPoolsResponse | null>;
     invalidate: (address?: string) => void;
+    removePool: (address: string, poolAddress: string) => void;
 };
 
 export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
@@ -79,6 +80,35 @@ export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
         } else {
             set({ byAddress: {} });
         }
+    },
+
+    removePool: (address: string, poolAddress: string) => {
+        set(state => {
+            const entry = state.byAddress[address];
+            if (!entry) return state;
+
+            const nextPools = entry.data.pools.filter(
+                pool => pool.poolAddress !== poolAddress,
+            );
+
+            if (nextPools.length === entry.data.pools.length) {
+                return state;
+            }
+
+            return {
+                ...state,
+                byAddress: {
+                    ...state.byAddress,
+                    [address]: {
+                        ...entry,
+                        data: {
+                            ...entry.data,
+                            pools: nextPools,
+                        },
+                    },
+                },
+            };
+        });
     },
 }));
 

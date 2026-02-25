@@ -60,7 +60,7 @@ export default function StatsOverview() {
                 </span>
             </h2>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-5 md:grid-cols-3">
                 {/* TVL */}
                 <div className="rounded-[24px] border bg-popover px-5 py-4 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">

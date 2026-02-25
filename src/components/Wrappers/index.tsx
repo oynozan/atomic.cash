@@ -5,7 +5,7 @@ export default function Wrapper({ children }: { children: React.ReactNode }) {
     return (
         <WalletWrapper>
             {children}
-            <Toaster richColors />
+            <Toaster richColors position="top-center" offset={140} />
         </WalletWrapper>
     );
 }
