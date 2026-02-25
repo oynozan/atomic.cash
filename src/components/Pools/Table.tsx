@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { usePoolsStore, type ApiPool, type PoolsResponse } from "@/store/pools";
+import { usePoolsStore, type ApiPool } from "@/store/pools";
 
 function formatNumber(n: number, maxDecimals = 4): string {
   if (!Number.isFinite(n)) return "-";
@@ -21,30 +21,6 @@ export default function PoolsTable() {
   useEffect(() => {
     fetchPools();
   }, [fetchPools]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6 rounded-[24px] border bg-popover p-8 text-center text-muted-foreground">
-        Loading pools…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col gap-6 rounded-[24px] border border-destructive/50 bg-destructive/5 p-8 text-center text-destructive">
-        {error}
-      </div>
-    );
-  }
-
-  if (!data || data.pools.length === 0) {
-    return (
-      <div className="flex flex-col gap-6 rounded-[24px] border bg-popover p-8 text-center text-muted-foreground">
-        No pools yet. Create a pool to list it here.
-      </div>
-    );
-  }
 
   const grouped = useMemo(() => {
     if (!data) return [];
@@ -80,6 +56,30 @@ export default function PoolsTable() {
 
     return Array.from(map.values()).sort((a, b) => b.totalBch - a.totalBch);
   }, [data]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6 rounded-[24px] border bg-popover p-8 text-center text-muted-foreground">
+        Loading pools…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-6 rounded-[24px] border border-destructive/50 bg-destructive/5 p-8 text-center text-destructive">
+        {error}
+      </div>
+    );
+  }
+
+  if (!data || data.pools.length === 0) {
+    return (
+      <div className="flex flex-col gap-6 rounded-[24px] border bg-popover p-8 text-center text-muted-foreground">
+        No pools yet. Create a pool to list it here.
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -140,7 +140,7 @@ function TokenGroupRow({
     tokenIconUrl?: string;
     totalBch: number;
     totalToken: number;
-    pools: PoolSummary[];
+    pools: ApiPool[];
   };
   expanded: boolean;
   onToggle: () => void;
