@@ -34,19 +34,59 @@ import { cache } from "../lib/cache";
 
 const electrumNetwork = NETWORK_STRING as "mainnet" | "testnet4" | "chipnet";
 
-// Create Electrum provider with public host selection (first endpoint wins for now).
-function createElectrumProvider(): NetworkProvider {
-    const primary = ELECTRUM_ENDPOINTS[0];
-    if (!primary) {
+type ElectrumWithRequest = NetworkProvider & {
+    performRequest: (method: string, ...params: unknown[]) => Promise<unknown>;
+};
+
+function createFailoverElectrumProvider(): NetworkProvider {
+    if (ELECTRUM_ENDPOINTS.length === 0) {
         return new ElectrumNetworkProvider(electrumNetwork);
     }
 
-    return new ElectrumNetworkProvider(electrumNetwork, {
-        hostname: primary.host,
+    const providers: Array<{
+        instance: ElectrumWithRequest;
+        performRequest: ElectrumWithRequest["performRequest"];
+    }> = ELECTRUM_ENDPOINTS.map(endpoint => {
+        const instance = new ElectrumNetworkProvider(electrumNetwork, {
+            hostname: endpoint.host,
+        }) as ElectrumWithRequest;
+
+        return {
+            instance,
+            performRequest: instance.performRequest.bind(instance),
+        };
     });
+
+    let currentIndex = 0;
+
+    async function performWithFailover(method: string, ...params: unknown[]): Promise<unknown> {
+        let lastError: unknown;
+
+        for (let i = 0; i < providers.length; i++) {
+            const index = (currentIndex + i) % providers.length;
+            const { performRequest } = providers[index];
+
+            try {
+                const result = await performRequest(method, ...params);
+                currentIndex = index;
+                return result;
+            } catch (error) {
+                lastError = error;
+                continue;
+            }
+        }
+
+        throw lastError ?? new Error("All Electrum endpoints failed");
+    }
+
+    // Patch the first provider instance to route all low-level Electrum
+    // calls through the failover-aware performRequest implementation.
+    providers[0].instance.performRequest = performWithFailover;
+
+    return providers[0].instance;
 }
 
-export const provider: NetworkProvider = createElectrumProvider();
+export const provider: NetworkProvider = createFailoverElectrumProvider();
 
 const contractPath = join(dirname(fileURLToPath(import.meta.url)), "contracts", "atomic.cash");
 
