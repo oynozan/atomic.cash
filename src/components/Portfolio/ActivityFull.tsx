@@ -112,15 +112,79 @@ export default function PortfolioActivityFull() {
                 </div>
             </div>
 
-            {/* Header row */}
-            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,2fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
-                <div>Time</div>
-                <div>Type</div>
-                <div>Amount</div>
-                <div className="text-right">Transaction</div>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+                {dappTxs.map((tx, index) => {
+                    const href = getExplorerUrl(tx.txid);
+                    const meta = tx.tokenCategory ? tokenMeta[tx.tokenCategory] : undefined;
+                    const typeLabel = (() => {
+                        switch (tx.type) {
+                            case "swap": return "Swapped";
+                            case "create_pool": return "Created pool";
+                            case "add_liquidity": return "Added liquidity";
+                            case "remove_liquidity": return "Removed liquidity";
+                            default: return "Activity";
+                        }
+                    })();
+                    const TypeIcon = (() => {
+                        switch (tx.type) {
+                            case "swap": return ArrowRightLeft;
+                            case "create_pool": return PlusCircle;
+                            case "add_liquidity": return ArrowUpRight;
+                            case "remove_liquidity": return ArrowDownRight;
+                            default: return ArrowRightLeft;
+                        }
+                    })();
+                    const amountLines: string[] = [];
+                    if (tx.amounts) {
+                        const { bchIn, bchOut, tokenIn, tokenOut } = tx.amounts;
+                        if (bchIn != null) amountLines.push(`-${bchIn} BCH`);
+                        if (bchOut != null) amountLines.push(`+${bchOut} BCH`);
+                        if (tokenIn != null)
+                            amountLines.push(`-${tokenIn} ${meta?.symbol ?? "TOK"}`);
+                        if (tokenOut != null)
+                            amountLines.push(`+${tokenOut} ${meta?.symbol ?? "TOK"}`);
+                    }
+                    return (
+                        <a
+                            key={`dapp-m-${tx.txid}-${index}`}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-xl border border-border/60 bg-background/30 p-3 hover:bg-background/50 transition-colors"
+                        >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[11px] text-muted-foreground">
+                                    {formatDate(tx.createdAt)}
+                                </span>
+                                <span className="flex items-center gap-1.5 text-sm font-medium">
+                                    <TypeIcon className="size-4 text-primary shrink-0" />
+                                    {typeLabel}
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-mono">
+                                {amountLines.length > 0
+                                    ? amountLines.map(line => <span key={line}>{line}</span>)
+                                    : <span className="text-muted-foreground">-</span>}
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground font-mono truncate">
+                                {tx.txid.slice(0, 8)}…{tx.txid.slice(-6)}
+                            </p>
+                        </a>
+                    );
+                })}
             </div>
 
-            <div className="divide-y divide-border/40">
+            {/* Desktop: table */}
+            <div className="hidden md:block">
+                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,2fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
+                    <div>Time</div>
+                    <div>Type</div>
+                    <div>Amount</div>
+                    <div className="text-right">Transaction</div>
+                </div>
+
+                <div className="divide-y divide-border/40">
                 {dappTxs.map((tx, index) => {
                     const href = getExplorerUrl(tx.txid);
                     const meta = tx.tokenCategory ? tokenMeta[tx.tokenCategory] : undefined;
@@ -180,8 +244,8 @@ export default function PortfolioActivityFull() {
                             </div>
 
                             {/* Type */}
-                            <div className="flex items-center gap-1">
-                                <TypeIcon className="size-3 mr-1 text-primary" />
+                            <div className="flex items-center gap-1.5">
+                                <TypeIcon className="size-4 shrink-0 mr-0.5 text-primary" />
                                 <span className="text-xs font-medium text-foreground">
                                     {typeLabel}
                                 </span>
@@ -220,6 +284,7 @@ export default function PortfolioActivityFull() {
                         </a>
                     );
                 })}
+                </div>
             </div>
 
             {hasMore && (

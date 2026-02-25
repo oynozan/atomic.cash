@@ -9,7 +9,7 @@ export default function Portfolio() {
     const [tab, setTab] = useState<"tokens" | "activity">("tokens");
 
     return (
-        <section className="w-screen pt-44 pb-32 flex justify-center">
+        <section className="w-full min-w-0 pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
             <PortfolioLayout active={tab} onChangeTab={setTab}>
                 <div className="space-y-4 min-h-[320px]">
                     {tab === "tokens" ? (

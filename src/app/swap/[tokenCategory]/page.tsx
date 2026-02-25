@@ -77,7 +77,7 @@ export default function SwapTokenPage() {
 
     if (!tokenCategory) {
         return (
-            <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
+            <section className="w-full min-w-0 min-h-screen pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
                 <div className="home-container max-w-6xl text-center text-muted-foreground">
                     Invalid token.
                 </div>
@@ -87,7 +87,7 @@ export default function SwapTokenPage() {
 
     if (error) {
         return (
-            <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
+            <section className="w-full min-w-0 min-h-screen pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
                 <div className="home-container max-w-6xl text-center">
                     <p className="text-destructive mb-4">{error}</p>
                     <Link href="/tokens" className="text-sm text-primary hover:underline">
@@ -130,9 +130,9 @@ export default function SwapTokenPage() {
         };
 
     return (
-        <section className="w-screen min-h-screen pt-44 pb-32 flex justify-center">
-            <div className="home-container max-w-6xl w-full">
-                <div className="mb-6 flex items-center justify-between gap-4">
+        <section className="w-full min-w-0 min-h-screen pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center px-2 sm:px-4">
+            <div className="home-container max-w-6xl w-full min-w-0">
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-4 min-w-0">
                     <TokenDetailHeader
                         data={{
                             symbol: view.symbol,
@@ -145,29 +145,34 @@ export default function SwapTokenPage() {
                     />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.3fr)] gap-6">
-                    {/* Left column: chart + trade history */}
-                    <div className="space-y-6">
-                        <TokenDetailPriceChart
-                            tokenCategory={view.tokenCategory}
-                            currentPrice={view.priceBch}
-                            refreshKey={reloadKey}
-                        />
-                        <TokenDetailTradeHistory
-                            tokenCategory={view.tokenCategory}
-                            tokenSymbol={view.symbol}
-                            tokenIconUrl={view.iconUrl}
-                            refreshKey={reloadKey}
-                        />
+                {/* Mobile: swap → chart → history → info. Desktop: left col = chart+history (one block), right col = swap, info */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 gap-4 sm:gap-6 min-w-0">
+                    {/* Left column: Chart + History — on mobile "contents" so they flow with order; on desktop one cell spanning 2 rows */}
+                    <div className="contents lg:flex lg:flex-col lg:gap-6 min-w-0 lg:col-start-1 lg:row-start-1 lg:row-end-3">
+                        <div className="order-2 min-w-0">
+                            <TokenDetailPriceChart
+                                tokenCategory={view.tokenCategory}
+                                currentPrice={view.priceBch}
+                                refreshKey={reloadKey}
+                            />
+                        </div>
+                        <div className="order-3 min-w-0">
+                            <TokenDetailTradeHistory
+                                tokenCategory={view.tokenCategory}
+                                tokenSymbol={view.symbol}
+                                tokenIconUrl={view.iconUrl}
+                                refreshKey={reloadKey}
+                            />
+                        </div>
                     </div>
 
-                    {/* Right column: swap + info */}
-                    <div className="space-y-6">
-                        <div className="rounded-[24px] border bg-popover p-5">
+                    {/* Swap: below lg use justify-center to center panel; desktop right col */}
+                    <div className="order-1 min-w-0 w-full flex justify-center lg:col-start-2 lg:row-start-1">
+                        <div className="rounded-[24px] border bg-popover p-4 sm:p-5 w-full">
                             <SwapPanel
+                                className="w-full mx-auto"
                                 onSwapCompleted={() => {
                                     setReloadKey(key => key + 1);
-                                    // So swap panel "Price" and header stay in sync
                                     useTokenPriceStore
                                         .getState()
                                         .invalidate(tokenCategory ?? undefined);
@@ -176,6 +181,10 @@ export default function SwapTokenPage() {
                                 }}
                             />
                         </div>
+                    </div>
+
+                    {/* Info — fourth on mobile (order-4), bottom-right on desktop */}
+                    <div className="order-4 min-w-0 lg:col-start-2 lg:row-start-2">
                         <TokenDetailInfo
                             data={{
                                 tokenCategory: view.tokenCategory,

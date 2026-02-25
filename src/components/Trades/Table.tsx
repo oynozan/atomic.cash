@@ -91,15 +91,83 @@ export default function TradesTable() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,2.2fr)_minmax(0,1.6fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
-                <div>Time</div>
-                <div>Type</div>
-                <div>Token</div>
-                <div>For</div>
-                <div className="text-right">Transaction</div>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+                {visibleTrades.map(tx => {
+                    const meta = tx.tokenCategory ? tokenMeta[tx.tokenCategory] : undefined;
+                    const isBuy = tx.direction === "bch_to_token";
+                    const tokenAmount = (() => {
+                        if (!tx.amounts) return null;
+                        const { tokenOut, tokenIn } = tx.amounts;
+                        if (isBuy) return tokenOut ?? null;
+                        return tokenIn ?? null;
+                    })();
+                    const bchAmount = (() => {
+                        if (!tx.amounts) return null;
+                        const { bchIn, bchOut } = tx.amounts;
+                        if (isBuy) return bchIn ?? null;
+                        return bchOut ?? null;
+                    })();
+                    const txUrl = getExplorerUrl(tx.txid);
+                    return (
+                        <a
+                            key={tx.txid}
+                            href={txUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-xl border border-border/60 bg-background/30 p-3 hover:bg-background/50 transition-colors"
+                        >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[11px] text-muted-foreground">
+                                    {formatTimeAgo(tx.createdAt)}
+                                </span>
+                                <span
+                                    className={
+                                        "text-xs font-medium " +
+                                        (isBuy ? "text-emerald-400" : "text-red-400")
+                                    }
+                                >
+                                    {isBuy ? "Buy" : "Sell"}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-sm">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    {meta?.iconUrl && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={meta.iconUrl}
+                                            alt={meta.symbol}
+                                            className="size-5 rounded-full object-cover border border-background/40 shrink-0"
+                                        />
+                                    )}
+                                    <span className="font-mono truncate">
+                                        {tokenAmount != null ? formatNumber(tokenAmount, 4) : "-"}{" "}
+                                        {meta?.symbol ?? "Token"}
+                                    </span>
+                                </div>
+                                <span className="font-mono text-muted-foreground shrink-0">
+                                    {bchAmount != null ? formatNumber(bchAmount, 6) : "-"} BCH
+                                </span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted-foreground font-mono truncate">
+                                {tx.txid.slice(0, 8)}…{tx.txid.slice(-6)}
+                            </div>
+                        </a>
+                    );
+                })}
             </div>
 
-            <div className="divide-y divide-border/40">
+            {/* Desktop: table */}
+            <div className="hidden md:block">
+                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,2.2fr)_minmax(0,1.6fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
+                    <div>Time</div>
+                    <div>Type</div>
+                    <div>Token</div>
+                    <div>For</div>
+                    <div className="text-right">Transaction</div>
+                </div>
+
+                <div className="divide-y divide-border/40">
                 {visibleTrades.map(tx => {
                     const meta = tx.tokenCategory ? tokenMeta[tx.tokenCategory] : undefined;
                     const isBuy = tx.direction === "bch_to_token";
@@ -198,6 +266,7 @@ export default function TradesTable() {
                         </a>
                     );
                 })}
+                </div>
             </div>
 
             {hasMore && (

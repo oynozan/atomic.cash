@@ -550,17 +550,17 @@ export default function PortfolioActions() {
                 </div>
             )}
 
-            {/* Receive modal */}
+            {/* Receive modal — scrollable so content is not hidden behind dock */}
             {receiveOpen && address && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+                    className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-black/60 px-4 pt-4 pb-24 sm:pb-4 overflow-y-auto"
                     onClick={() => setReceiveOpen(false)}
                 >
                     <div
-                        className="w-full max-w-2xl rounded-2xl border bg-popover p-5 shadow-xl flex flex-col gap-4"
+                        className="w-full max-w-2xl max-h-[min(calc(100vh-6rem),85vh)] rounded-2xl border bg-popover p-5 shadow-xl flex flex-col gap-4 overflow-y-auto"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="mb-1 flex items-center justify-between w-full">
+                        <div className="mb-1 flex items-center justify-between w-full shrink-0">
                             <h2 className="text-lg font-semibold">Receive crypto</h2>
                             <button
                                 type="button"
@@ -570,10 +570,10 @@ export default function PortfolioActions() {
                                 ✕
                             </button>
                         </div>
-                        <div className="text-xs text-muted-foreground text-center">
+                        <div className="text-xs text-muted-foreground text-center shrink-0">
                             Scan the code to receive BCH or CashTokens.
                         </div>
-                        <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center gap-6 mt-1">
+                        <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center gap-6 mt-1 pb-2 min-h-0">
                             <div className="flex-1 flex flex-col items-center gap-3">
                                 <div className="rounded-[24px] bg-background/80 p-4 shadow-inner">
                                     <div className="bg-popover rounded-2xl p-3 border border-border/60">

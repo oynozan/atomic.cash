@@ -35,7 +35,7 @@ export default function RootLayout({
             <body className={`${manrope.variable} ${figtree.variable} antialiased`}>
                 <Wrapper>
                     <Header />
-                    <main>{children}</main>
+                    <main className="min-w-0 overflow-x-hidden">{children}</main>
                     <Nav />
                 </Wrapper>
             </body>

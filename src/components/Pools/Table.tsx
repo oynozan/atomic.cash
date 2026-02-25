@@ -13,8 +13,7 @@ function formatNumber(n: number, maxDecimals = 4): string {
     if (!Number.isFinite(n)) return "-";
     const abs = Math.abs(n);
     let decimals = maxDecimals;
-    // Küçük değerler için daha fazla, büyükler için daha az hassasiyet:
-    // < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (veya verilen üst sınır).
+    // More decimals for small values, fewer for larger: < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (or given max).
     if (abs > 0 && abs < 0.01) decimals = Math.min(8, maxDecimals + 4);
     else if (abs < 1) decimals = Math.min(6, maxDecimals + 2);
     else decimals = Math.min(4, maxDecimals);

@@ -138,14 +138,8 @@ export default function TokenDetailTradeHistory({
             )}
             {!loading && trades.length > 0 && (
                 <>
-                    <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,2fr)_minmax(0,1.4fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
-                        <div>Time</div>
-                        <div>Type</div>
-                        <div>{tokenSymbol ?? "Token"}</div>
-                        <div>For</div>
-                        <div className="text-right">Transaction</div>
-                    </div>
-                    <div className="divide-y divide-border/40">
+                    {/* Mobile: card list */}
+                    <div className="md:hidden space-y-2">
                         {trades.map(tx => {
                             const isBuy = tx.direction === "bch_to_token";
                             const tokenAmount = (() => {
@@ -165,64 +159,143 @@ export default function TokenDetailTradeHistory({
                                     href={txUrl}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.4fr)] items-center px-3 py-3 text-xs hover:bg-background/40 transition-colors"
+                                    className="block rounded-xl border border-border/60 bg-background/30 p-3 hover:bg-background/50 transition-colors"
                                 >
-                                    <div className="text-[11px] text-muted-foreground">
-                                        {formatTimeAgo(tx.createdAt)}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        {isBuy ? (
-                                            <ArrowUpRight className="size-3 text-emerald-400" />
-                                        ) : (
-                                            <ArrowDownRight className="size-3 text-red-400" />
-                                        )}
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                        <span className="text-[11px] text-muted-foreground">
+                                            {formatTimeAgo(tx.createdAt)}
+                                        </span>
                                         <span
                                             className={
                                                 "text-xs font-medium " +
                                                 (isBuy ? "text-emerald-400" : "text-red-400")
                                             }
                                         >
+                                            {isBuy ? (
+                                                <ArrowUpRight className="size-3.5 inline mr-0.5" />
+                                            ) : (
+                                                <ArrowDownRight className="size-3.5 inline mr-0.5" />
+                                            )}
                                             {isBuy ? "Buy" : "Sell"}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        {tokenIconUrl && (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img
-                                                src={tokenIconUrl}
-                                                alt={tokenSymbol ?? "Token"}
-                                                className="size-5 rounded-full object-cover border border-background/40"
-                                            />
-                                        )}
-                                        <span className="font-mono text-[11px]">
-                                            {tokenAmount != null
-                                                ? formatNumber(tokenAmount, 6)
-                                                : "–"}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="size-5 rounded-full bg-primary/10 flex items-center justify-center">
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img
-                                                src="/icons/bch.svg"
-                                                alt="BCH"
-                                                className="size-3.5 rounded-full"
-                                            />
+                                    <div className="flex items-center justify-between gap-2 text-sm">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            {tokenIconUrl && (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img
+                                                    src={tokenIconUrl}
+                                                    alt={tokenSymbol ?? "Token"}
+                                                    className="size-5 rounded-full object-cover border border-background/40 shrink-0"
+                                                />
+                                            )}
+                                            <span className="font-mono truncate">
+                                                {tokenAmount != null
+                                                    ? formatNumber(tokenAmount, 4)
+                                                    : "–"}{" "}
+                                                {tokenSymbol ?? "Token"}
+                                            </span>
                                         </div>
-                                        <span className="font-mono text-[11px]">
-                                            {bchAmount != null ? formatBchPrice(bchAmount) : "–"}{" "}
-                                            BCH
+                                        <span className="font-mono text-muted-foreground shrink-0">
+                                            {bchAmount != null ? formatBchPrice(bchAmount) : "–"} BCH
                                         </span>
                                     </div>
-                                    <div className="flex items-center justify-end gap-2 text-[11px] text-muted-foreground">
-                                        <span className="font-mono">
-                                            {tx.txid.slice(0, 6)}…{tx.txid.slice(-4)}
-                                        </span>
-                                        <ExternalLink className="size-3" />
-                                    </div>
+                                    <p className="mt-1 text-[11px] text-muted-foreground font-mono truncate">
+                                        {tx.txid.slice(0, 8)}…{tx.txid.slice(-6)}
+                                    </p>
                                 </a>
                             );
                         })}
+                    </div>
+
+                    {/* Desktop: table */}
+                    <div className="hidden md:block">
+                        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,2fr)_minmax(0,1.4fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
+                            <div>Time</div>
+                            <div>Type</div>
+                            <div>{tokenSymbol ?? "Token"}</div>
+                            <div>For</div>
+                            <div className="text-right">Transaction</div>
+                        </div>
+                        <div className="divide-y divide-border/40">
+                            {trades.map(tx => {
+                                const isBuy = tx.direction === "bch_to_token";
+                                const tokenAmount = (() => {
+                                    if (!tx.amounts) return null;
+                                    const { tokenOut, tokenIn } = tx.amounts;
+                                    return isBuy ? (tokenOut ?? null) : (tokenIn ?? null);
+                                })();
+                                const bchAmount = (() => {
+                                    if (!tx.amounts) return null;
+                                    const { bchIn, bchOut } = tx.amounts;
+                                    return isBuy ? (bchIn ?? null) : (bchOut ?? null);
+                                })();
+                                const txUrl = getExplorerUrl(tx.txid);
+                                return (
+                                    <a
+                                        key={tx.txid}
+                                        href={txUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.4fr)] items-center px-3 py-3 text-xs hover:bg-background/40 transition-colors"
+                                    >
+                                        <div className="text-[11px] text-muted-foreground">
+                                            {formatTimeAgo(tx.createdAt)}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {isBuy ? (
+                                                <ArrowUpRight className="size-3 text-emerald-400" />
+                                            ) : (
+                                                <ArrowDownRight className="size-3 text-red-400" />
+                                            )}
+                                            <span
+                                                className={
+                                                    "text-xs font-medium " +
+                                                    (isBuy ? "text-emerald-400" : "text-red-400")
+                                                }
+                                            >
+                                                {isBuy ? "Buy" : "Sell"}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {tokenIconUrl && (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img
+                                                    src={tokenIconUrl}
+                                                    alt={tokenSymbol ?? "Token"}
+                                                    className="size-5 rounded-full object-cover border border-background/40"
+                                                />
+                                            )}
+                                            <span className="font-mono text-[11px]">
+                                                {tokenAmount != null
+                                                    ? formatNumber(tokenAmount, 6)
+                                                    : "–"}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="size-5 rounded-full bg-primary/10 flex items-center justify-center">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src="/icons/bch.svg"
+                                                    alt="BCH"
+                                                    className="size-3.5 rounded-full"
+                                                />
+                                            </div>
+                                            <span className="font-mono text-[11px]">
+                                                {bchAmount != null ? formatBchPrice(bchAmount) : "–"}{" "}
+                                                BCH
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-end gap-2 text-[11px] text-muted-foreground">
+                                            <span className="font-mono">
+                                                {tx.txid.slice(0, 6)}…{tx.txid.slice(-4)}
+                                            </span>
+                                            <ExternalLink className="size-3" />
+                                        </div>
+                                    </a>
+                                );
+                            })}
+                        </div>
                     </div>
                     {nextCursor != null && (
                         <div className="flex justify-center pt-2 pb-1">

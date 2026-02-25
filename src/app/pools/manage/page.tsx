@@ -599,7 +599,7 @@ export default function ManagePoolsPage() {
 
     if (!isConnected || !address) {
         return (
-            <section className="w-screen pt-44 pb-32 flex justify-center">
+            <section className="w-full min-w-0 pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
                 <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
@@ -623,7 +623,7 @@ export default function ManagePoolsPage() {
 
     if (isInitialLoading) {
         return (
-            <section className="w-screen pt-44 pb-32 flex justify-center">
+            <section className="w-full min-w-0 pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
                 <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
@@ -642,7 +642,7 @@ export default function ManagePoolsPage() {
 
     if (error) {
         return (
-            <section className="w-screen pt-44 pb-32 flex justify-center">
+            <section className="w-full min-w-0 pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center">
                 <div className="home-container max-w-3xl">
                     <Link
                         href="/pools"
@@ -660,8 +660,8 @@ export default function ManagePoolsPage() {
     }
 
     return (
-        <section className="w-screen pt-44 pb-32 flex justify-center">
-            <div className="home-container max-w-3xl">
+        <section className="w-full min-w-0 pt-28 sm:pt-36 lg:pt-44 pb-24 sm:pb-32 flex justify-center overflow-x-hidden">
+                <div className="home-container max-w-3xl min-w-0 w-full overflow-hidden">
                 <Link
                     href="/pools"
                     className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6"
@@ -675,15 +675,15 @@ export default function ManagePoolsPage() {
                         You do not have any pools yet. Create a pool from the Pools page.
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-4 min-w-0">
                         {grouped.map(group => (
                             <div
                                 key={group.tokenCategory}
-                                className="rounded-[24px] border bg-popover px-5 py-4 space-y-3"
+                                className="rounded-[24px] border bg-popover px-4 sm:px-5 py-4 space-y-3 min-w-0 overflow-hidden"
                             >
                                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center -space-x-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="flex items-center -space-x-3 shrink-0">
                                             <TokenAvatar
                                                 symbol={
                                                     group.tokenSymbol ??
@@ -700,8 +700,8 @@ export default function ManagePoolsPage() {
                                                 />
                                             </div>
                                         </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-lg font-semibold">
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-base sm:text-lg font-semibold truncate">
                                                 {group.tokenSymbol ??
                                                     group.tokenCategory.slice(0, 8) + "…"}{" "}
                                                 - BCH
@@ -722,7 +722,7 @@ export default function ManagePoolsPage() {
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
+                                    <div className="text-xs text-muted-foreground shrink-0">
                                         {group.pools.length} micro pool
                                         {group.pools.length > 1 ? "s" : ""}
                                     </div>
@@ -735,18 +735,18 @@ export default function ManagePoolsPage() {
                                         .map((pool, idx) => (
                                             <div
                                                 key={`${pool.poolOwnerPkhHex}-${pool.tokenCategory}-${idx}`}
-                                                className="flex items-center justify-between rounded-[16px] bg-background/40 px-4 py-3 text-xs"
+                                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-[16px] bg-background/40 px-3 sm:px-4 py-3 text-xs min-w-0 overflow-hidden"
                                             >
-                                                <div className="flex flex-col">
+                                                <div className="flex flex-col min-w-0 shrink-0">
                                                     <span className="font-medium">
                                                         Micro pool #{idx + 1}
                                                     </span>
-                                                    <span className="text-[11px] text-muted-foreground">
-                                                        Pool address: {pool.poolAddress.slice(-10)}…
+                                                    <span className="text-[11px] text-muted-foreground font-mono truncate max-w-full" title={pool.poolAddress}>
+                                                        Pool address: {pool.poolAddress.slice(0, 10)}…{pool.poolAddress.slice(-8)}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="text-right">
+                                                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 min-w-0 shrink-0 sm:justify-end">
+                                                    <div className="text-right shrink-0 w-full sm:w-auto">
                                                         <div className="text-[11px] text-muted-foreground">
                                                             Liquidity
                                                         </div>
@@ -767,11 +767,11 @@ export default function ManagePoolsPage() {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex flex-col gap-2 shrink-0 items-end">
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            className="text-xs"
+                                                            className="text-xs whitespace-nowrap"
                                                             onClick={() => {
                                                                 setActiveModal({
                                                                     type: "add",
@@ -786,7 +786,7 @@ export default function ManagePoolsPage() {
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            className="text-xs"
+                                                            className="text-xs whitespace-nowrap"
                                                             onClick={() => {
                                                                 setActiveModal({
                                                                     type: "remove",

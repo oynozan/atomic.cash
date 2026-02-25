@@ -21,8 +21,8 @@ export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderDat
     const positive = hasChange && change! >= 0;
 
     return (
-        <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
                 {data.iconUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -35,8 +35,8 @@ export default function TokenDetailHeader({ data }: { data: TokenDetailHeaderDat
                         {(data.symbol ?? data.name ?? "T").slice(0, 1)}
                     </div>
                 )}
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-figtree font-bold text-foreground">
+                <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-figtree font-bold text-foreground truncate">
                         {data.name ?? data.symbol ?? "Token"}
                     </h1>
                     <span className="text-sm font-medium text-muted-foreground">

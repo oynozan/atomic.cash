@@ -10,8 +10,7 @@ function formatNumber(n: number | null, maxDecimals = 6): string {
     if (n == null || !Number.isFinite(n)) return "-";
     const abs = Math.abs(n);
     let decimals = maxDecimals;
-    // Küçük BCH değerleri için daha fazla, büyükler için daha az hassasiyet:
-    // < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (veya verilen üst sınır).
+    // More decimals for small BCH values, fewer for larger: < 0.01 BCH -> 8 dec, < 1 BCH -> 6 dec, >= 1 BCH -> 4 dec (or given max).
     if (abs > 0 && abs < 0.01) decimals = Math.min(8, maxDecimals + 2);
     else if (abs < 1) decimals = Math.min(6, maxDecimals);
     else decimals = Math.min(4, maxDecimals);
@@ -124,10 +123,10 @@ export default function TokensTable() {
 
     return (
         <div className="rounded-[24px] border bg-popover py-4 px-4 flex flex-col gap-3">
-            <div className="mb-2 flex items-center justify-between px-1">
-                <div className="flex items-center gap-3">
+            <div className="mb-2 flex flex-col gap-2 px-1 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-sm font-semibold text-foreground">Tokens</h2>
-                    <div className="hidden md:inline-flex items-center gap-1 rounded-full border bg-background/40 px-1 py-0.5 text-[11px]">
+                    <div className="flex flex-wrap items-center gap-1 rounded-full border bg-background/40 px-1 py-0.5 text-[11px]">
                         <button
                             type="button"
                             onClick={() => setSortMode("tvl")}
@@ -201,23 +200,86 @@ export default function TokensTable() {
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Search tokens"
-                    className="w-40 md:w-56 rounded-full border bg-background/40 px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground/70"
+                    className="w-full min-w-0 rounded-full border bg-background/40 px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground/70 md:w-56"
                 />
             </div>
 
-            {/* Header */}
-            <div className="grid grid-cols-[40px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.6fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
-                <div>#</div>
-                <div>Token name</div>
-                <div>Price</div>
-                <div>1 day</div>
-                <div>7 days</div>
-                <div>TVL</div>
-                <div>30d Volume</div>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+                {visibleTokens.map((t) => {
+                    const change1d = formatPercent(t.change1dPercent);
+                    return (
+                        <Link
+                            key={t.tokenCategory}
+                            href={`/swap/${t.tokenCategory}`}
+                            className="block rounded-xl border border-border/60 bg-background/30 p-3 hover:bg-background/50 transition-colors"
+                        >
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    {t.iconUrl && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={t.iconUrl}
+                                            alt={t.symbol}
+                                            className="size-8 rounded-full object-cover border border-background/40 shrink-0"
+                                        />
+                                    )}
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium truncate">
+                                            {t.name ?? t.symbol ?? "Token"}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t.symbol ?? t.tokenCategory.slice(0, 8)}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <p className="text-sm font-mono font-medium">
+                                        {formatBchPrice(t.priceBch)} BCH
+                                    </p>
+                                    <div className="flex items-center justify-end gap-1 mt-0.5">
+                                        {change1d.label !== "–" &&
+                                            (change1d.positive ? (
+                                                <ArrowUpRight className="size-3 text-emerald-400" />
+                                            ) : (
+                                                <ArrowDownRight className="size-3 text-red-400" />
+                                            ))}
+                                        <span
+                                            className={
+                                                change1d.label === "–"
+                                                    ? "text-[11px] text-muted-foreground"
+                                                    : change1d.positive
+                                                      ? "text-[11px] text-emerald-400"
+                                                      : "text-[11px] text-red-400"
+                                            }
+                                        >
+                                            {change1d.label}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex justify-between text-[11px] text-muted-foreground">
+                                <span>TVL: {formatNumber(t.tvlBch, 4)} BCH</span>
+                                <span>30d Vol: {formatNumber(t.volume30dBch, 4)} BCH</span>
+                            </div>
+                        </Link>
+                    );
+                })}
             </div>
 
-            {/* Rows */}
-            <div className="divide-y divide-border/40">
+            {/* Desktop: table */}
+            <div className="hidden md:block">
+                <div className="grid grid-cols-[40px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.6fr)] px-3 py-2 text-[11px] text-muted-foreground border-b border-border/60">
+                    <div>#</div>
+                    <div>Token name</div>
+                    <div>Price</div>
+                    <div>1 day</div>
+                    <div>7 days</div>
+                    <div>TVL</div>
+                    <div>30d Volume</div>
+                </div>
+
+                <div className="divide-y divide-border/40">
                 {visibleTokens.map((t, idx) => {
                     const change1d = formatPercent(t.change1dPercent);
                     const change7d = formatPercent(t.change7dPercent);
@@ -309,6 +371,7 @@ export default function TokensTable() {
                         </Link>
                     );
                 })}
+                </div>
             </div>
 
             {hasMore && (

@@ -13,6 +13,7 @@ import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
 import { getAddressExplorerUrl } from "@/dapp/explorer";
+import { cn } from "@/lib/utils";
 
 type Direction = "bch_to_token" | "token_to_bch";
 
@@ -39,6 +40,7 @@ const QUOTE_REFRESH_INTERVAL_MS = 20_000;
 
 type SwapPanelProps = {
     onSwapCompleted?: () => void;
+    className?: string;
 };
 
 function formatNumber(n: number, maxDecimals = 6): string {
@@ -175,7 +177,7 @@ function TokenSelectModal({
 }
 
 export default function SwapPanel(props: SwapPanelProps) {
-    const { onSwapCompleted } = props;
+    const { onSwapCompleted, className } = props;
     const { address, isConnected, session, provider } = useWalletSession();
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -762,10 +764,10 @@ export default function SwapPanel(props: SwapPanelProps) {
     }, [direction, swapType, lastEdited, activeAmount, slippage, selectedToken, txLoading]);
 
     return (
-        <div id="swap-panel" className="w-full max-w-120">
+        <div id="swap-panel" className={cn(className ? "w-full min-w-0" : "w-full max-w-[min(100%,36rem)] sm:max-w-[36rem] min-w-0", className)}>
             <div className="relative overflow-hidden rounded-[24px] border bg-popover">
-                {/* Top: input leg */}
-                <div className="flex items-center justify-between gap-3 px-5 py-4 rounded-t-[24px]">
+                {/* Top: input leg — right column fixed width so both rows keep same input width */}
+                <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 rounded-t-[24px] min-w-0">
                     <div className="min-w-0 flex-1">
                         <p className="text-lg leading-none font-semibold text-muted-foreground">
                             {inputLabel}
@@ -791,16 +793,16 @@ export default function SwapPanel(props: SwapPanelProps) {
                                 setEffectivePrice(null);
                                 setActivePool(null);
                             }}
-                            className="mt-2 w-full border-0 bg-transparent text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="mt-2 w-full min-w-0 border-0 bg-transparent text-2xl sm:text-3xl md:text-4xl lg:text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
                     </div>
 
-                    <div className="mt-1 flex flex-col items-end gap-3 shrink-0">
+                    <div className="mt-1 flex flex-col items-end gap-3 shrink-0 w-[7.5rem] min-w-[7.5rem]">
                         <button
                             type="button"
                             disabled={direction === "bch_to_token"}
                             onClick={() => setShowTokenModal(true)}
-                            className="inline-flex h-10 items-center gap-2 rounded-full border bg-background/20 px-4 text-sm font-semibold shrink-0 disabled:cursor-default disabled:opacity-60"
+                            className="inline-flex h-10 items-center gap-2 rounded-full border bg-background/20 px-4 text-sm font-semibold shrink-0 disabled:cursor-default disabled:opacity-60 w-full justify-center"
                         >
                             {direction === "bch_to_token" ? (
                                 <span className="leading-none flex items-center gap-2">
@@ -813,23 +815,23 @@ export default function SwapPanel(props: SwapPanelProps) {
                                     <span>BCH</span>
                                 </span>
                             ) : (
-                                <span className="leading-none flex items-center gap-2">
+                                <span className="leading-none flex items-center gap-2 truncate">
                                     {selectedToken?.iconUrl && (
                                         /* eslint-disable @next/next/no-img-element */
                                         <img
                                             src={selectedToken.iconUrl}
                                             alt={inputTokenLabel}
-                                            className="size-4 rounded-full"
+                                            className="size-4 rounded-full shrink-0"
                                         />
                                     )}
-                                    <span>{selectedToken ? inputTokenLabel : "Select token"}</span>
+                                    <span className="truncate">{selectedToken ? inputTokenLabel : "Select token"}</span>
                                 </span>
                             )}
                         </button>
-                        <p className="text-sm leading-none font-semibold text-muted-foreground text-nowrap">
-                            {/* Balance placeholder */}
+                        <p className="text-sm leading-none font-semibold text-muted-foreground text-nowrap h-[1.25rem]">
+                            {/* Balance placeholder — fixed height so layout stable */}
                         </p>
-                        {/* Percentage buttons for active leg */}
+                        {/* Percentage buttons for active leg — always reserve space so row height doesn't change */}
                         {(() => {
                             let maxAmount: number | null = null;
                             if (direction === "bch_to_token") {
@@ -841,10 +843,9 @@ export default function SwapPanel(props: SwapPanelProps) {
                                 maxAmount = tb?.amount ?? null;
                             }
 
-                            if (!maxAmount || maxAmount <= 0) return null;
-
                             const handlePercent = (pct: number) => {
-                                const v = (maxAmount! * pct) / 100;
+                                if (!maxAmount || maxAmount <= 0) return;
+                                const v = (maxAmount * pct) / 100;
                                 setInputAmount(v.toString());
                                 setSwapType("exact_input");
                                 setLastEdited("input");
@@ -856,24 +857,30 @@ export default function SwapPanel(props: SwapPanelProps) {
                             };
 
                             return (
-                                <div className="flex items-center gap-1 text-[11px]">
-                                    {[25, 50, 75].map(pct => (
-                                        <button
-                                            key={pct}
-                                            type="button"
-                                            onClick={() => handlePercent(pct)}
-                                            className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
-                                        >
-                                            {pct}%
-                                        </button>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => handlePercent(100)}
-                                        className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
-                                    >
-                                        Max
-                                    </button>
+                                <div className="flex items-center gap-1 text-[11px] min-h-[1.5rem]">
+                                    {maxAmount && maxAmount > 0 ? (
+                                        <>
+                                            {[25, 50, 75].map(pct => (
+                                                <button
+                                                    key={pct}
+                                                    type="button"
+                                                    onClick={() => handlePercent(pct)}
+                                                    className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
+                                                >
+                                                    {pct}%
+                                                </button>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePercent(100)}
+                                                className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
+                                            >
+                                                Max
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <span className="invisible">0%</span>
+                                    )}
                                 </div>
                             );
                         })()}
@@ -881,7 +888,7 @@ export default function SwapPanel(props: SwapPanelProps) {
                 </div>
 
                 {/* Middle: direction toggle */}
-                <div className="relative border-t bg-secondary px-5 py-4 rounded-b-[24px]">
+                <div className="relative border-t bg-secondary px-3 sm:px-5 py-3 sm:py-4 rounded-b-[24px] min-w-0">
                     <button
                         type="button"
                         className="absolute left-1/2 top-0 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-3 border-popover bg-secondary"
@@ -891,7 +898,7 @@ export default function SwapPanel(props: SwapPanelProps) {
                     </button>
 
                     {/* Bottom: output leg */}
-                    <div className="mt-1 flex items-center justify-between gap-3 px-0">
+                    <div className="mt-1 flex items-center justify-between gap-2 sm:gap-3 px-0 min-w-0">
                         <div className="min-w-0 flex-1">
                             <p className="text-lg leading-none font-semibold text-muted-foreground">
                                 {outputLabel}
@@ -917,28 +924,28 @@ export default function SwapPanel(props: SwapPanelProps) {
                                     setEffectivePrice(null);
                                     setActivePool(null);
                                 }}
-                                className="mt-2 w-full border-0 bg-transparent text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="mt-2 w-full min-w-0 border-0 bg-transparent text-2xl sm:text-3xl md:text-4xl lg:text-5xl leading-none font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                         </div>
 
-                        <div className="mt-1 flex flex-col items-end gap-3 shrink-0">
+                        <div className="mt-1 flex flex-col items-end gap-3 shrink-0 w-[7.5rem] min-w-[7.5rem]">
                             <button
                                 type="button"
                                 disabled={direction === "token_to_bch"}
                                 onClick={() => setShowTokenModal(true)}
-                                className="inline-flex h-10 items-center gap-2 rounded-full border bg-background/20 px-4 text-sm font-semibold shrink-0 disabled:cursor-default disabled:opacity-60"
+                                className="inline-flex h-10 items-center gap-2 rounded-full border bg-background/20 px-4 text-sm font-semibold shrink-0 disabled:cursor-default disabled:opacity-60 w-full justify-center"
                             >
-                                <span className="flex items-center gap-2">
+                                <span className="flex items-center gap-2 truncate">
                                     {direction === "bch_to_token" ? (
                                         <>
                                             {selectedToken?.iconUrl && (
                                                 <img
                                                     src={selectedToken.iconUrl}
                                                     alt={outputTokenLabel}
-                                                    className="size-4 rounded-full"
+                                                    className="size-4 rounded-full shrink-0"
                                                 />
                                             )}
-                                            <span>
+                                            <span className="truncate">
                                                 {selectedToken ? outputTokenLabel : "Select token"}
                                             </span>
                                         </>
@@ -947,23 +954,24 @@ export default function SwapPanel(props: SwapPanelProps) {
                                             <img
                                                 src="/icons/bch.svg"
                                                 alt="BCH"
-                                                className="size-4 rounded-full"
+                                                className="size-4 rounded-full shrink-0"
                                             />
-                                            <span>{outputTokenLabel}</span>
+                                            <span className="truncate">{outputTokenLabel}</span>
                                         </>
                                     )}
                                 </span>
                             </button>
-                            <p className="text-sm leading-none font-semibold text-muted-foreground text-nowrap">
-                                {/* Balance placeholder */}
+                            <p className="text-sm leading-none font-semibold text-muted-foreground text-nowrap h-[1.25rem]">
+                                {/* Balance placeholder — same height as input row */}
                             </p>
+                            <div className="min-h-[1.5rem]" aria-hidden />
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Slippage controls */}
-            <div className="mt-3 flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-1 text-xs text-muted-foreground min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-semibold">Slippage</span>
                     <div className="inline-flex gap-1 rounded-full border bg-background/40 px-1 py-0.5">
@@ -1115,7 +1123,7 @@ export default function SwapPanel(props: SwapPanelProps) {
             )}
 
             {/* Footer notice */}
-            <p className="mt-2 text-sm text-muted-foreground font-semibold px-4 text-center">
+            <p className="mt-2 text-xs sm:text-sm text-muted-foreground font-semibold px-2 sm:px-4 text-center wrap-break-word">
                 <span className="text-primary">Atomic Cash</span> is still in early development. If
                 you encounter any issues, please report them at{" "}
                 <a
