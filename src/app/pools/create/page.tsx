@@ -238,12 +238,12 @@ export default function CreatePoolPage() {
             const res = await fetch("/api/pool/create", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     tokenCategory: trimmedTokenCategory,
                     bchAmount: bch,
                     tokenAmount: token,
                     useMarketPrice: shouldUseMarketPrice || undefined,
-                    ownerTokenAddress: address,
                 }),
             });
 
@@ -264,6 +264,7 @@ export default function CreatePoolPage() {
             const broadcastRes = await fetch("/api/tx/broadcast", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
             });
             const broadcastData = await broadcastRes.json();
@@ -278,9 +279,9 @@ export default function CreatePoolPage() {
                 void fetch("/api/portfolio/transactions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
                     body: JSON.stringify({
                         txid,
-                        address,
                         type: "create_pool",
                         tokenCategory: trimmedTokenCategory,
                         amounts: {

@@ -32,6 +32,12 @@ export default function SwapTokenPage() {
     const params = useParams();
     const tokenCategory = typeof params?.tokenCategory === "string" ? params.tokenCategory : null;
     const [data, setData] = useState<TokenDetailResponse | null>(null);
+    const [lastIdentity, setLastIdentity] = useState<{
+        tokenCategory: string;
+        symbol?: string;
+        name?: string;
+        iconUrl?: string;
+    } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
@@ -52,7 +58,6 @@ export default function SwapTokenPage() {
         const run = async () => {
             setLoading(true);
             setError(null);
-            setData(null);
             const url = `/api/tokens/${encodeURIComponent(tokenCategory)}`;
             try {
                 const json = await fetchJsonOnce<TokenDetailResponse>(url);
@@ -74,6 +79,38 @@ export default function SwapTokenPage() {
             cancelled = true;
         };
     }, [tokenCategory, reloadKey]);
+
+    // Preserve the last known token identity (name/symbol/icon) so that while
+    // data is reloading (after a swap, for example) the header label does not
+    // fall back to the generic "Token" placeholder. Price and change values
+    // always come from the latest fetched data.
+    useEffect(() => {
+        if (!tokenCategory) return;
+
+        const source =
+            data ??
+            (overviewToken && {
+                tokenCategory,
+                symbol: overviewToken.symbol,
+                name: overviewToken.name,
+                iconUrl: overviewToken.iconUrl,
+            });
+
+        if (!source) return;
+
+        setLastIdentity(prev => {
+            if (!prev || prev.tokenCategory !== source.tokenCategory) {
+                return source;
+            }
+            if (prev.symbol !== source.symbol || prev.name !== source.name) {
+                return source;
+            }
+            if (prev.iconUrl !== source.iconUrl) {
+                return source;
+            }
+            return prev;
+        });
+    }, [tokenCategory, data, overviewToken]);
 
     if (!tokenCategory) {
         return (
@@ -98,7 +135,8 @@ export default function SwapTokenPage() {
         );
     }
 
-    const view: TokenDetailResponse = data ??
+    const view: TokenDetailResponse =
+        data ??
         (overviewToken && {
             tokenCategory,
             symbol: overviewToken.symbol,
@@ -135,9 +173,9 @@ export default function SwapTokenPage() {
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-4 min-w-0">
                     <TokenDetailHeader
                         data={{
-                            symbol: view.symbol,
-                            name: view.name,
-                            iconUrl: view.iconUrl,
+                            symbol: lastIdentity?.symbol ?? view.symbol,
+                            name: lastIdentity?.name ?? view.name,
+                            iconUrl: lastIdentity?.iconUrl ?? view.iconUrl,
                             priceBch: view.priceBch,
                             change1dPercent: view.change1dPercent,
                             change7dPercent: view.change7dPercent,

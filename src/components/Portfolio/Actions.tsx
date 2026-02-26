@@ -210,6 +210,7 @@ export default function PortfolioActions() {
             const res = await fetch("/api/tx/send", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     fromAddress: address,
                     toAddress: trimmedTo,
@@ -236,6 +237,7 @@ export default function PortfolioActions() {
             const broadcastRes = await fetch("/api/tx/broadcast", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
             });
             const broadcastData = await broadcastRes.json();

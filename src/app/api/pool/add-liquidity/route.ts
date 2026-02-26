@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { addLiquidity } from "@/dapp/pool/addLiquidity";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/pool/add-liquidity
- * Body: { tokenCategory, bchAmount?, tokenAmount?, ownerTokenAddress }
+ * Body: { tokenCategory, bchAmount?, tokenAmount? }
  * Returns WC transaction object (JSON string) for WalletConnect signing.
  */
 export async function POST(request: NextRequest) {
@@ -14,7 +16,6 @@ export async function POST(request: NextRequest) {
         tokenCategory?: string;
         bchAmount?: number;
         tokenAmount?: number;
-        ownerTokenAddress?: string;
     };
 
     try {
@@ -23,22 +24,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { tokenCategory, bchAmount, tokenAmount, ownerTokenAddress } = body;
+    const { tokenCategory, bchAmount, tokenAmount } = body;
+
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!tokenCategory || typeof tokenCategory !== "string" || tokenCategory.trim() === "") {
         return NextResponse.json({ error: "tokenCategory is required" }, { status: 400 });
     }
-    if (
-        !ownerTokenAddress ||
-        typeof ownerTokenAddress !== "string" ||
-        ownerTokenAddress.trim() === ""
-    ) {
-        return NextResponse.json(
-            { error: "ownerTokenAddress is required (token-aware address)" },
-            { status: 400 },
-        );
-    }
-
     const hasBch = typeof bchAmount === "number" && Number.isFinite(bchAmount) && bchAmount > 0;
     const hasToken =
         typeof tokenAmount === "number" && Number.isFinite(tokenAmount) && tokenAmount > 0;
@@ -59,7 +54,7 @@ export async function POST(request: NextRequest) {
                 tokenAmount,
             },
             {
-                ownerTokenAddress: ownerTokenAddress.trim(),
+                ownerTokenAddress: auth.address.trim(),
             },
         );
 

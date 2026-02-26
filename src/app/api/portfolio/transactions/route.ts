@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+import { getAuthFromRequest } from "@/lib/auth";
 import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +30,13 @@ export async function POST(request: NextRequest) {
 
     const { txid, address, type, direction, tokenCategory, amounts } = body;
 
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     if (!txid || typeof txid !== "string" || txid.trim() === "") {
         return NextResponse.json({ error: "txid is required" }, { status: 400 });
-    }
-    if (!address || typeof address !== "string" || address.trim() === "") {
-        return NextResponse.json({ error: "address is required" }, { status: 400 });
     }
     const allowedTypes: StoredTransaction["type"][] = [
         "swap",
@@ -50,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     const trimmedTxid = txid.trim();
-    const trimmedAddress = address.trim();
+    const trimmedAddress = auth.address.trim();
 
     try {
         const coll = await getTransactionsCollection();

@@ -55,8 +55,10 @@ export const usePortfolioBalancesStore = create<PortfolioBalancesState>((set, ge
             error: { ...state.error, [key]: null },
         }));
         try {
-            const url = `/api/portfolio/balances?address=${encodeURIComponent(address)}`;
-            const data = await fetchJsonOnce<PortfolioBalancesResponse>(url);
+            const url = `/api/portfolio/balances`;
+            const data = await fetchJsonOnce<PortfolioBalancesResponse>(url, {
+                credentials: "same-origin",
+            });
             set(state => ({
                 byAddress: { ...state.byAddress, [key]: { data, fetchedAt: Date.now() } },
                 loading: { ...state.loading, [key]: false },

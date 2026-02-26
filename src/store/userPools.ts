@@ -57,8 +57,11 @@ export const useUserPoolsStore = create<UserPoolsState>((set, get) => ({
         }
 
         try {
-            const url = `/api/user/pools?address=${encodeURIComponent(address)}`;
-            const fetchOptions: RequestInit = force || !entry ? { cache: "no-store" } : {};
+            const url = `/api/user/pools`;
+            const fetchOptions: RequestInit = {
+                ...(force || !entry ? { cache: "no-store" } : {}),
+                credentials: "same-origin",
+            };
             const data = await fetchJsonOnce<UserPoolsResponse>(url, fetchOptions);
             set(state => ({
                 byAddress: { ...state.byAddress, [key]: { data, fetchedAt: Date.now() } },

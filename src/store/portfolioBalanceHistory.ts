@@ -44,8 +44,10 @@ export const usePortfolioBalanceHistoryStore = create<PortfolioBalanceHistorySta
         }
 
         try {
-            const url = `/api/portfolio/balance-history?address=${encodeURIComponent(address)}&range=${range}`;
-            const raw = await fetchJsonOnce<BalanceHistoryResponse>(url);
+            const url = `/api/portfolio/balance-history?range=${range}`;
+            const raw = await fetchJsonOnce<BalanceHistoryResponse>(url, {
+                credentials: "same-origin",
+            });
             const data: BalanceHistoryResponse = {
                 points: Array.isArray(raw?.points) ? raw.points : [],
                 swapsThisWeek: raw?.swapsThisWeek,

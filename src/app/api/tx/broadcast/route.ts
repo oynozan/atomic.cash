@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { provider } from "@/dapp/common";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,11 @@ export async function POST(request: NextRequest) {
         body = await request.json();
     } catch {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { signedTxHex } = body;

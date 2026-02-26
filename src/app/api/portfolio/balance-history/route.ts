@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 import { getAllPools } from "@/dapp/queries/registry";
 import { getUserBalances } from "@/dapp/queries/user";
+import { getAuthFromRequest } from "@/lib/auth";
+import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +38,12 @@ const RANGE_MS: Record<string, number> = {
 /**
  * Replay swap txs backwards from current balance to build history.
  * Only swap txs have the amounts we need; other types are skipped.
- * Query: address (required), range (optional: 1d | 7d | 30d | 90d, default 30d).
+ * Query: range (optional: 1d | 7d | 30d | 90d, default 30d).
  */
 export async function GET(request: NextRequest) {
-    const address = request.nextUrl.searchParams.get("address")?.trim();
-    if (!address) {
-        return NextResponse.json({ error: "Missing address" }, { status: 400 });
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const rangeParam = request.nextUrl.searchParams.get("range") ?? "30d";
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const [balance, allPoolsResult, txColl] = await Promise.all([
-            getUserBalances(address),
+            getUserBalances(auth.address.trim()),
             getAllPools(),
             getTransactionsCollection(),
         ]);
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
 
         const txs = await txColl
             .find({
-                address,
+                address: auth.address.trim(),
                 type: "swap",
                 createdAt: { $gte: from },
             })

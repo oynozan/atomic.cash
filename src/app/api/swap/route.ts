@@ -15,6 +15,7 @@ import {
     findBestRouteForTokensForExactBch,
 } from "@/dapp/swap/router";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,11 @@ export async function POST(request: NextRequest) {
     const { direction, tokenCategory, amount, slippageTolerance, userTokenAddress, swapType } =
         body;
 
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     if (
         !direction ||
         (direction !== SwapDirection.BCH_TO_TOKEN && direction !== SwapDirection.TOKEN_TO_BCH)
@@ -62,19 +68,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
     }
 
-    if (
-        !userTokenAddress ||
-        typeof userTokenAddress !== "string" ||
-        userTokenAddress.trim() === ""
-    ) {
-        return NextResponse.json(
-            { error: "userTokenAddress is required (token-aware address)" },
-            { status: 400 },
-        );
-    }
-
     const trimmedCategory = tokenCategory.trim();
-    const trimmedAddress = userTokenAddress.trim();
+    const trimmedAddress = auth.address.trim();
 
     const normalizedSwapType =
         swapType === SwapType.EXACT_OUTPUT || swapType === "exact_output"

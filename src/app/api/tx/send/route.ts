@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-    provider,
     bchToSatoshi,
+    ensureTokenDecimals,
     filterBchUtxos,
     filterTokenUtxos,
+    provider,
     tokenToOnChain,
     toTokenAddress,
-    ensureTokenDecimals,
 } from "@/dapp/common";
 import { DUST_LIMIT, DEFAULT_MINER_FEE } from "@/dapp/config";
-import type { UnsignedTxTemplate, UtxoInput, TxOutput } from "@/dapp/types";
+import type { TxOutput, UnsignedTxTemplate, UtxoInput } from "@/dapp/types";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type Body = {
-    fromAddress?: string;
     toAddress?: string;
     amount?: number;
     /**
@@ -42,10 +42,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { fromAddress, toAddress, amount, tokenCategory } = body;
+    const { toAddress, amount, tokenCategory } = body;
 
-    if (!fromAddress || typeof fromAddress !== "string" || fromAddress.trim() === "") {
-        return NextResponse.json({ error: "fromAddress is required" }, { status: 400 });
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!toAddress || typeof toAddress !== "string" || toAddress.trim() === "") {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
     }
 
-    const from = fromAddress.trim();
+    const from = auth.address.trim();
     const to = toAddress.trim();
 
     // If a tokenCategory is provided, build a CashTokens "send token" transaction.

@@ -363,11 +363,11 @@ async function handleAddLiquidity(
         const res = await fetch("/api/pool/add-liquidity", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({
                 tokenCategory: pool.tokenCategory,
                 bchAmount: mode === "bch" ? value : undefined,
                 tokenAmount: mode === "token" ? value : undefined,
-                ownerTokenAddress: address,
             }),
         });
         const data = await res.json();
@@ -386,6 +386,7 @@ async function handleAddLiquidity(
         const broadcastRes = await fetch("/api/tx/broadcast", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
         });
         const broadcastData = await broadcastRes.json();
@@ -400,9 +401,9 @@ async function handleAddLiquidity(
             void fetch("/api/portfolio/transactions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     txid,
-                    address,
                     type: "add_liquidity",
                     tokenCategory: pool.tokenCategory,
                     amounts: {
@@ -436,12 +437,10 @@ async function handleRemoveLiquidity(
 ) {
     const body: {
         tokenCategory: string;
-        ownerTokenAddress: string;
         withdrawAll?: boolean;
         percentage?: number;
     } = {
         tokenCategory: pool.tokenCategory,
-        ownerTokenAddress: address,
     };
 
     if (withdrawAll) {
@@ -460,6 +459,7 @@ async function handleRemoveLiquidity(
         const res = await fetch("/api/pool/remove-liquidity", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify(body),
         });
         const data = await res.json();
@@ -478,6 +478,7 @@ async function handleRemoveLiquidity(
         const broadcastRes = await fetch("/api/tx/broadcast", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
         });
         const broadcastData = await broadcastRes.json();
@@ -492,9 +493,9 @@ async function handleRemoveLiquidity(
             void fetch("/api/portfolio/transactions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     txid,
-                    address,
                     type: "remove_liquidity",
                     tokenCategory: pool.tokenCategory,
                     amounts: {

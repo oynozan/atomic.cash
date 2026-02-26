@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
+
 import { fetchTokenMetadata } from "@/dapp/common";
+import { getAuthFromRequest } from "@/lib/auth";
+import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/portfolio/history?address=...&limit=...
+ * GET /api/portfolio/history?limit=...&cursor=...
  *
  * Returns:
  * - `dapp`  → High-level dapp transactions (swap, pool create, add/remove liquidity)
@@ -20,10 +22,9 @@ type TokenMeta = {
 };
 
 export async function GET(request: NextRequest) {
-    const address = request.nextUrl.searchParams.get("address");
-
-    if (!address || address.trim() === "") {
-        return NextResponse.json({ error: "Missing or empty address" }, { status: 400 });
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const limitParam = request.nextUrl.searchParams.get("limit");
@@ -35,13 +36,11 @@ export async function GET(request: NextRequest) {
     );
     const cursor = cursorParam ? Number.parseInt(cursorParam, 10) : undefined;
 
-    const trimmedAddress = address.trim();
-
     try {
         const coll = await getTransactionsCollection();
 
         const filter: { address: string; createdAt?: { $lt: number } } = {
-            address: trimmedAddress,
+            address: auth.address.trim(),
         };
         if (cursor != null && !Number.isNaN(cursor)) {
             filter.createdAt = { $lt: cursor };

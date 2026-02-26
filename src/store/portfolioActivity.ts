@@ -53,14 +53,12 @@ type ActivityState = {
 const INITIAL_PAGE_SIZE = 20;
 const ACTIVITY_TTL_MS = 60_000;
 
-function buildUrl(address: string, cursor?: number) {
+function buildUrl(_address: string, cursor?: number) {
     const params = new URLSearchParams();
-    params.set("address", address);
     params.set("limit", String(INITIAL_PAGE_SIZE));
     if (cursor != null) params.set("cursor", String(cursor));
     return `/api/portfolio/history?${params.toString()}`;
 }
-
 export const usePortfolioActivityStore = create<ActivityState>((set, get) => ({
     byAddress: {},
 
@@ -88,7 +86,9 @@ export const usePortfolioActivityStore = create<ActivityState>((set, get) => ({
         }));
 
         try {
-            const json = await fetchJsonOnce<HistoryResponse>(buildUrl(key));
+            const json = await fetchJsonOnce<HistoryResponse>(buildUrl(key), {
+                credentials: "same-origin",
+            });
             set(state => ({
                 byAddress: {
                     ...state.byAddress,
@@ -148,6 +148,7 @@ export const usePortfolioActivityStore = create<ActivityState>((set, get) => ({
         try {
             const json = await fetchJsonOnce<HistoryResponse>(
                 buildUrl(key, base.dapp.nextCursor),
+                { credentials: "same-origin" },
             );
 
             const merged: HistoryResponse = {

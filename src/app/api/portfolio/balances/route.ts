@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { getUserBalances } from "@/dapp/queries/user";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/portfolio/balances?address=...
+ * GET /api/portfolio/balances
  * Returns BCH and token balances for the given Cash address (token-aware).
  */
 export async function GET(request: NextRequest) {
-    const address = request.nextUrl.searchParams.get("address");
-    if (!address || address.trim() === "") {
-        return NextResponse.json({ error: "Missing or empty address" }, { status: 400 });
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
-        const balance = await getUserBalances(address.trim());
+        const balance = await getUserBalances(auth.address.trim());
 
         return NextResponse.json({
             bch: balance.bch,

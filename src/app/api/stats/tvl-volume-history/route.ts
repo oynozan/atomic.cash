@@ -46,22 +46,27 @@ export async function GET(request: NextRequest) {
     const range = request.nextUrl.searchParams.get("range") ?? "30d";
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-
-    let start: number;
+    let windowMs: number;
+    let bucketMs: number;
     switch (range) {
         case "7d":
-            start = now - 7 * dayMs;
+            windowMs = 7 * dayMs;
+            bucketMs = dayMs / 4; // 6h buckets for richer 1W view
             break;
         case "30d":
-            start = now - 30 * dayMs;
+            windowMs = 30 * dayMs;
+            bucketMs = dayMs; // 1d buckets
             break;
         case "90d":
-            start = now - 90 * dayMs;
+            windowMs = 90 * dayMs;
+            bucketMs = dayMs * 3; // 3d buckets
             break;
         default:
-            start = now - 30 * dayMs;
+            windowMs = 30 * dayMs;
+            bucketMs = dayMs;
             break;
     }
+    const start = now - windowMs;
 
     try {
         const [allPools, coll] = await Promise.all([getAllPools(), getTransactionsCollection()]);
@@ -69,7 +74,10 @@ export async function GET(request: NextRequest) {
         const currentTvlBch = allPools.pools.reduce((sum, pool) => sum + pool.bchReserve * 2, 0);
 
         const [swaps, liquidityTxs] = await Promise.all([
-            coll.find({ type: "swap", createdAt: { $gte: start } }).sort({ createdAt: 1 }).toArray(),
+            coll
+                .find({ type: "swap", createdAt: { $gte: start } })
+                .sort({ createdAt: 1 })
+                .toArray(),
             coll
                 .find({
                     type: { $in: ["create_pool", "add_liquidity", "remove_liquidity"] },
@@ -79,12 +87,12 @@ export async function GET(request: NextRequest) {
                 .toArray(),
         ]);
 
-        const numDays = Math.max(1, Math.ceil((now - start) / dayMs));
+        const numBuckets = Math.max(1, Math.ceil((now - start) / bucketMs));
         const points: HistoryPoint[] = [];
 
-        for (let i = 0; i < numDays; i++) {
-            const bucketEnd = start + (i + 1) * dayMs;
-            const bucketStart = start + i * dayMs;
+        for (let i = 0; i < numBuckets; i++) {
+            const bucketEnd = start + (i + 1) * bucketMs;
+            const bucketStart = start + i * bucketMs;
             const t = Math.min(bucketEnd, now);
 
             let volumeBch = 0;

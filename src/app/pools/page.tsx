@@ -1,6 +1,7 @@
 import PoolsTable from "@/components/Pools/Table";
 import CreatePoolCard from "@/components/Pools/CreatePoolCard";
 import { ManagePoolsLink } from "@/components/Pools/ManageLink";
+import TvlVolumeChart from "@/components/Stats/TvlVolumeChart";
 
 export default function Pools() {
     return (
@@ -10,6 +11,9 @@ export default function Pools() {
                 <div className="mt-12 mb-6 flex flex-wrap items-center justify-between gap-4">
                     <h1 className="text-2xl sm:text-3xl lg:text-4xl font-figtree font-bold">Pools</h1>
                     <ManagePoolsLink />
+                </div>
+                <div className="mb-5 overflow-x-auto min-w-0 -mx-1 px-1">
+                    <TvlVolumeChart />
                 </div>
                 <div className="overflow-x-auto min-w-0 -mx-1 px-1">
                     <PoolsTable />

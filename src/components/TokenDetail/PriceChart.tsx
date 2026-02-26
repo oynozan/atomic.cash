@@ -297,18 +297,32 @@ export default function PriceChart({
         const series = seriesRef.current;
         if (!chart || !series) return;
 
-        const points = data?.points ?? [];
+        const rawPoints = data?.points ?? [];
+        const points = [...rawPoints].sort((a, b) => a.timestamp - b.timestamp);
 
         if (mode === "line") {
-            let lineData: LineData[] = points.map(p => ({
-                time: Math.floor(p.timestamp / 1000) as UTCTimestamp,
-                value: p.priceBch,
-            }));
+            const byTime = new Map<number, LineData>();
+            for (const p of points) {
+                const t = Math.floor(p.timestamp / 1000);
+                byTime.set(t, {
+                    time: t as UTCTimestamp,
+                    value: p.priceBch,
+                });
+            }
 
             if (hasSpot) {
-                const nowSec = Math.floor(Date.now() / 1000) as UTCTimestamp;
-                lineData = [...lineData, { time: nowSec, value: currentPrice as number }];
+                const nowSec = Math.floor(Date.now() / 1000);
+                const spotVal = currentPrice as number;
+                const existing = byTime.get(nowSec);
+                byTime.set(nowSec, {
+                    time: nowSec as UTCTimestamp,
+                    value: existing ? spotVal : spotVal,
+                });
             }
+
+            const lineData: LineData[] = Array.from(byTime.values()).sort(
+                (a, b) => (a.time as number) - (b.time as number),
+            );
 
             (series as ISeriesApi<"Line">).setData(lineData);
         } else {
@@ -322,9 +336,9 @@ export default function PriceChart({
                 }
             } else {
                 let prevClose = points[0]!.priceBch;
-                const prevTime = Math.floor(points[0]!.timestamp / 1000) as UTCTimestamp;
+                let prevTimeSec = Math.floor(points[0]!.timestamp / 1000);
                 candles.push({
-                    time: prevTime,
+                    time: prevTimeSec as UTCTimestamp,
                     open: prevClose,
                     high: prevClose,
                     low: prevClose,
@@ -333,22 +347,33 @@ export default function PriceChart({
 
                 for (let i = 1; i < points.length; i++) {
                     const p = points[i]!;
-                    const t = Math.floor(p.timestamp / 1000) as UTCTimestamp;
+                    const tSec = Math.floor(p.timestamp / 1000);
+                    if (tSec <= prevTimeSec) continue;
+                    const t = tSec as UTCTimestamp;
                     const open = prevClose;
                     const close = p.priceBch;
                     const high = Math.max(open, close);
                     const low = Math.min(open, close);
                     candles.push({ time: t, open, high, low, close });
                     prevClose = close;
+                    prevTimeSec = tSec;
                 }
 
                 if (hasSpot) {
-                    const t = Math.floor(Date.now() / 1000) as UTCTimestamp;
-                    const open = prevClose;
-                    const close = currentPrice as number;
-                    const high = Math.max(open, close);
-                    const low = Math.min(open, close);
-                    candles.push({ time: t, open, high, low, close });
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    if (nowSec > prevTimeSec) {
+                        const open = prevClose;
+                        const close = currentPrice as number;
+                        const high = Math.max(open, close);
+                        const low = Math.min(open, close);
+                        candles.push({
+                            time: nowSec as UTCTimestamp,
+                            open,
+                            high,
+                            low,
+                            close,
+                        });
+                    }
                 }
             }
 

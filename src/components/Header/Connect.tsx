@@ -78,23 +78,17 @@ export default function ConnectWallet({ className }: { className?: string }) {
     const balanceLabel =
         bchBalance !== null && Number.isFinite(bchBalance) ? `${bchBalance.toFixed(4)} BCH` : "";
 
-    const disabled = session.isConnecting;
+    const disabled = session.isConnecting || session.isAuthorizing;
 
     if (isConnected) {
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button className={className} disabled={disabled}>
-                        {isConnected ? (
-                            <>
-                                <span className="max-[500px]:hidden">{formattedAddress} · </span>
-                                {balanceLabel || ""}
-                            </>
-                        ) : session.isConnecting ? (
-                            "Connecting..."
-                        ) : (
-                            "Connect Wallet"
-                        )}
+                        <>
+                            <span className="max-[500px]:hidden">{formattedAddress} · </span>
+                            {balanceLabel || ""}
+                        </>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="bottom" align="end" className="min-w-40 cursor-pointer">
@@ -132,11 +126,8 @@ export default function ConnectWallet({ className }: { className?: string }) {
 
     return (
         <Button className={className} onClick={handleConnect} disabled={disabled}>
-            {isConnected ? (
-                <>
-                    <span className="max-[500px]:hidden">{formattedAddress} · </span>
-                    {balanceLabel || ""}
-                </>
+            {session.isAuthorizing ? (
+                "Signing..."
             ) : session.isConnecting ? (
                 "Connecting..."
             ) : (

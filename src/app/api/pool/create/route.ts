@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+
+import { registerPoolOwner } from "@/dapp/queries/registry";
 import { createPool } from "@/dapp/pool/create";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
-import { registerPoolOwner } from "@/dapp/queries/registry";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/pool/create
- * Body: CreatePoolParams + { ownerTokenAddress: string }
+ * Body: CreatePoolParams
  * Returns WC transaction object (JSON string) for WalletConnect signing.
  */
 export async function POST(request: NextRequest) {
@@ -18,7 +20,6 @@ export async function POST(request: NextRequest) {
         tokenDecimals?: number;
         priceDeviationTolerance?: number;
         useMarketPrice?: boolean;
-        ownerTokenAddress?: string;
     };
     try {
         body = await request.json();
@@ -26,30 +27,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const {
-        tokenCategory,
-        bchAmount,
-        tokenAmount,
-        tokenDecimals,
-        priceDeviationTolerance,
-        useMarketPrice,
-        ownerTokenAddress,
-    } = body;
+    const { tokenCategory, bchAmount, tokenAmount, tokenDecimals, priceDeviationTolerance, useMarketPrice } =
+        body;
+
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!tokenCategory || typeof tokenCategory !== "string" || tokenCategory.trim() === "") {
         return NextResponse.json({ error: "tokenCategory is required" }, { status: 400 });
     }
-    if (
-        !ownerTokenAddress ||
-        typeof ownerTokenAddress !== "string" ||
-        ownerTokenAddress.trim() === ""
-    ) {
-        return NextResponse.json(
-            { error: "ownerTokenAddress is required (token-aware address)" },
-            { status: 400 },
-        );
-    }
-
     try {
         const result = await createPool(
             {
@@ -61,7 +49,7 @@ export async function POST(request: NextRequest) {
                 useMarketPrice,
             },
             {
-                ownerTokenAddress: ownerTokenAddress.trim(),
+                ownerTokenAddress: auth.address.trim(),
             },
         );
 
@@ -75,7 +63,7 @@ export async function POST(request: NextRequest) {
 
         // Ensure pool owner is registered in Mongo so routing & stats can see this owner,
         // even if the frontend later fails to make an explicit registry call.
-        await registerPoolOwner(result.unsignedTx.poolOwnerPkhHex, ownerTokenAddress.trim());
+        await registerPoolOwner(result.unsignedTx.poolOwnerPkhHex, auth.address.trim());
 
         const wcTransactionJson = templateToWcTransactionObject(result.unsignedTx, {
             broadcast: false,

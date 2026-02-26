@@ -514,6 +514,7 @@ export default function SwapPanel(props: SwapPanelProps) {
                     const res = await fetch("/api/swap/quote", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
+                        credentials: "same-origin",
                         signal: controller.signal,
                         body: JSON.stringify({
                             direction,
@@ -669,12 +670,12 @@ export default function SwapPanel(props: SwapPanelProps) {
             const res = await fetch("/api/swap", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     direction,
                     tokenCategory: selectedToken.category,
                     amount: value,
                     slippageTolerance: slippage,
-                    userTokenAddress: address,
                     swapType,
                 }),
             });
@@ -708,6 +709,7 @@ export default function SwapPanel(props: SwapPanelProps) {
             const broadcastRes = await fetch("/api/tx/broadcast", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({ signedTxHex: signResult.signedTransaction }),
             });
             const broadcastData = await broadcastRes.json();
@@ -729,9 +731,9 @@ export default function SwapPanel(props: SwapPanelProps) {
                 await fetch("/api/portfolio/transactions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
                     body: JSON.stringify({
                         txid,
-                        address,
                         type: "swap",
                         direction,
                         tokenCategory: selectedToken.category,
@@ -804,6 +806,7 @@ export default function SwapPanel(props: SwapPanelProps) {
                 const res = await fetch("/api/swap/quote", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
                     signal: controller.signal,
                     body: JSON.stringify({
                         direction,

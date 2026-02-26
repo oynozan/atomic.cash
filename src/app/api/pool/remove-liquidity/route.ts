@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { removeLiquidity } from "@/dapp/pool/removeLiquidity";
 import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/pool/remove-liquidity
- * Body: { tokenCategory, percentage?, bchAmount?, withdrawAll?, ownerTokenAddress }
+ * Body: { tokenCategory, percentage?, bchAmount?, withdrawAll? }
  * Returns WC transaction object (JSON string) for WalletConnect signing.
  */
 export async function POST(request: NextRequest) {
@@ -15,7 +17,6 @@ export async function POST(request: NextRequest) {
         percentage?: number;
         bchAmount?: number;
         withdrawAll?: boolean;
-        ownerTokenAddress?: string;
     };
 
     try {
@@ -24,22 +25,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { tokenCategory, percentage, bchAmount, withdrawAll, ownerTokenAddress } = body;
+    const { tokenCategory, percentage, bchAmount, withdrawAll } = body;
+
+    const auth = getAuthFromRequest(request);
+    if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!tokenCategory || typeof tokenCategory !== "string" || tokenCategory.trim() === "") {
         return NextResponse.json({ error: "tokenCategory is required" }, { status: 400 });
     }
-    if (
-        !ownerTokenAddress ||
-        typeof ownerTokenAddress !== "string" ||
-        ownerTokenAddress.trim() === ""
-    ) {
-        return NextResponse.json(
-            { error: "ownerTokenAddress is required (token-aware address)" },
-            { status: 400 },
-        );
-    }
-
     const hasWithdrawAll = withdrawAll === true;
     const hasPercentage =
         typeof percentage === "number" &&
@@ -66,7 +61,7 @@ export async function POST(request: NextRequest) {
                 withdrawAll,
             },
             {
-                ownerTokenAddress: ownerTokenAddress.trim(),
+                ownerTokenAddress: auth.address.trim(),
             },
         );
 
