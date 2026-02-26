@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         address: payload.sub,
         publicKeyHex: payload.pub,
         expiresAt: payload.exp * 1000,
+        token,
     });
 
     response.cookies.set(cookie.name, cookie.value, cookie.options);

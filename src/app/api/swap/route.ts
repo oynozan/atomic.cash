@@ -14,7 +14,7 @@ import {
     findBestRouteForBchForExactTokens,
     findBestRouteForTokensForExactBch,
 } from "@/dapp/swap/router";
-import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { templateToWcTransactionObject, serializeUnsignedTxTemplate } from "@/dapp/walletconnect";
 import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             wcTransactionJson,
+            unsignedTxTemplate: serializeUnsignedTxTemplate(swapResult.unsignedTx),
             direction: swapResult.direction,
             swapType: swapResult.swapType,
             inputAmount: swapResult.inputAmount,

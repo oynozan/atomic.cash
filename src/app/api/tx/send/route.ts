@@ -11,7 +11,7 @@ import {
 } from "@/dapp/common";
 import { DUST_LIMIT, DEFAULT_MINER_FEE } from "@/dapp/config";
 import type { TxOutput, UnsignedTxTemplate, UtxoInput } from "@/dapp/types";
-import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { templateToWcTransactionObject, serializeUnsignedTxTemplate } from "@/dapp/walletconnect";
 import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
                 success: true,
                 wcTransactionJson,
+                unsignedTxTemplate: serializeUnsignedTxTemplate(template),
             });
         } catch (err) {
             const message =
@@ -282,6 +283,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             wcTransactionJson,
+            unsignedTxTemplate: serializeUnsignedTxTemplate(template),
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to prepare send transaction";

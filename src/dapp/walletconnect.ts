@@ -1,4 +1,42 @@
 /**
+ * Serialize an UnsignedTxTemplate to a plain JSON-safe object.
+ * BigInt fields (satoshis, token amounts, minerFee) are converted to strings
+ * so the result can be passed through JSON.stringify / NextResponse.json.
+ */
+export function serializeUnsignedTxTemplate(template: UnsignedTxTemplate) {
+    return {
+        inputs: template.inputs.map(input => ({
+            txid: input.txid,
+            vout: input.vout,
+            satoshis: input.satoshis.toString(),
+            token: input.token
+                ? {
+                      category: input.token.category,
+                      amount: input.token.amount.toString(),
+                  }
+                : undefined,
+            type: input.type,
+            unlockFunction: input.unlockFunction,
+        })),
+        outputs: template.outputs.map(output => ({
+            to: output.to,
+            amount: output.amount.toString(),
+            token: output.token
+                ? {
+                      category: output.token.category,
+                      amount: output.token.amount.toString(),
+                  }
+                : undefined,
+        })),
+        poolAddress: template.poolAddress,
+        poolOwnerPkhHex: template.poolOwnerPkhHex,
+        minerFee: template.minerFee.toString(),
+        operationType: template.operationType,
+        ownerAddress: template.ownerAddress,
+    };
+}
+
+/**
  * Convert UnsignedTxTemplate to WcTransactionObject for WalletConnect signing.
  *
  * - User inputs (type: "user") are unlocked with placeholderP2PKHUnlocker(ownerAddress)

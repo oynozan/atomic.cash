@@ -186,6 +186,21 @@ export function createAuthToken(params: {
 }
 
 export function getAuthFromRequest(req: NextRequest): AuthContext | null {
+    // Check Authorization: Bearer header first (for SDK / server-side clients)
+    const authorization = req.headers.get("authorization");
+    if (authorization?.startsWith("Bearer ")) {
+        const bearerToken = authorization.slice(7).trim();
+        const bearerPayload = verifyJwt(bearerToken);
+        if (bearerPayload) {
+            return {
+                address: bearerPayload.sub,
+                publicKeyHex: bearerPayload.pub,
+                expiresAt: bearerPayload.exp * 1000,
+            };
+        }
+    }
+
+    // Fall back to HTTP-only cookie (browser clients)
     const cookie = req.cookies.get(AUTH_COOKIE_NAME);
     if (!cookie?.value) return null;
     const payload = verifyJwt(cookie.value);

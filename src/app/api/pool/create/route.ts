@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { registerPoolOwner } from "@/dapp/queries/registry";
 import { createPool } from "@/dapp/pool/create";
-import { templateToWcTransactionObject } from "@/dapp/walletconnect";
+import { templateToWcTransactionObject, serializeUnsignedTxTemplate } from "@/dapp/walletconnect";
 import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             wcTransactionJson,
+            unsignedTxTemplate: serializeUnsignedTxTemplate(result.unsignedTx),
             poolAddress: result.poolAddress,
             poolBch: result.poolBch.toString(),
             poolTokens: result.poolTokens.toString(),
