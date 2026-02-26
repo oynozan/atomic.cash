@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
                 outputAmount: quote.outputAmount,
                 priceImpact: quote.priceImpact,
                 effectivePrice: quote.effectivePrice,
+                spotPrice: quote.spotPrice,
                 feeAmount: quote.feeAmount,
                 minimumReceived: quote.minimumReceived,
                 maximumSent: quote.maximumSent,

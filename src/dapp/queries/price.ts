@@ -7,7 +7,6 @@ import {
     ensureTokenDecimals,
     getInputPrice,
     getOutputPrice,
-    calculatePriceImpact,
     bytesToHex,
     getTokenToBchExactInputOutput,
 } from "../common";
@@ -153,9 +152,28 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
             ? satoshiToBch(outputAmountRaw)
             : tokenFromOnChain(outputAmountRaw, tokenCategory);
 
-    // Price impact
-    const inputReserve = direction === SwapDirection.BCH_TO_TOKEN ? poolBch : poolTokens;
-    const priceImpact = calculatePriceImpact(inputAmountRaw, inputReserve);
+    // Effective price (always BCH per token, independent of direction)
+    // - BCH_TO_TOKEN  : input = BCH,  output = token  -> BCH per token
+    // - TOKEN_TO_BCH  : input = token, output = BCH   -> BCH per token
+    const effectivePrice =
+        direction === SwapDirection.BCH_TO_TOKEN
+            ? inputAmount / outputAmount
+            : outputAmount / inputAmount;
+
+    // Price impact (selected pool only, based on this pool's spot vs. effective execution price)
+    const liquidityBch = satoshiToBch(poolBch);
+    const liquidityToken = tokenFromOnChain(poolTokens, tokenCategory);
+
+    const spotPriceBchPerToken =
+        Number.isFinite(liquidityBch) && Number.isFinite(liquidityToken) && liquidityToken > 0
+            ? liquidityBch / liquidityToken
+            : 0;
+
+    let priceImpact = 0;
+    if (spotPriceBchPerToken > 0 && Number.isFinite(effectivePrice) && effectivePrice > 0) {
+        const diff = (effectivePrice - spotPriceBchPerToken) / spotPriceBchPerToken;
+        priceImpact = Math.abs(diff * 100);
+    }
 
     // Fee (0.3%)
     const feeAmountRaw = (inputAmountRaw * 3n) / 1000n;
@@ -163,9 +181,6 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
         inputType === "bch"
             ? satoshiToBch(feeAmountRaw)
             : tokenFromOnChain(feeAmountRaw, tokenCategory);
-
-    // Effective price
-    const effectivePrice = inputAmount / outputAmount;
 
     // Slippage
     const slippageMultiplier = BigInt(Math.floor((100 - slippageTolerance) * 10));
@@ -190,6 +205,7 @@ export async function getQuote(params: GetQuoteParams): Promise<PriceQuote | nul
         outputAmountRaw,
         outputType,
         priceImpact,
+        spotPrice: spotPriceBchPerToken,
         feeAmount,
         feeAmountRaw,
         effectivePrice,

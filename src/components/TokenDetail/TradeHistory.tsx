@@ -5,6 +5,7 @@ import { ArrowDownRight, ArrowUpRight, ExternalLink } from "lucide-react";
 import { getExplorerUrl } from "@/dapp/explorer";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { formatBchPrice } from "@/lib/utils";
+import { getSocket } from "@/lib/socket";
 
 type StoredTrade = {
     txid: string;
@@ -100,6 +101,52 @@ export default function TokenDetailTradeHistory({
         };
     }, [tokenCategory, refreshKey]);
 
+    // Append new swaps for this token as they arrive over the socket so the list
+    // updates in real-time without a full remount or flicker. Periodic refetches
+    // via refreshKey will reconcile with the backend and deduplicate by txid.
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        type TxPayload = {
+            type?: string;
+            tokenCategory?: string;
+            txid?: string;
+            address?: string;
+            direction?: StoredTrade["direction"];
+            amounts?: StoredTrade["amounts"];
+            createdAt?: number;
+        };
+
+        const handleSwapTx = (payload: TxPayload) => {
+            if (!payload || payload.type !== "swap") return;
+            if (payload.tokenCategory !== tokenCategory) return;
+            if (!payload.txid || !payload.address || !payload.createdAt) return;
+
+            const tx: StoredTrade = {
+                txid: payload.txid,
+                address: payload.address,
+                type: "swap",
+                direction: payload.direction,
+                tokenCategory: payload.tokenCategory,
+                amounts: payload.amounts,
+                createdAt: payload.createdAt,
+            };
+
+            setTrades(prev => {
+                if (prev.some(t => t.txid === tx.txid)) return prev;
+                return [tx, ...prev];
+            });
+            setTotal(prev => (prev == null ? prev : prev + 1));
+        };
+
+        socket.on("transaction:swap", handleSwapTx);
+
+        return () => {
+            socket.off("transaction:swap", handleSwapTx);
+        };
+    }, [tokenCategory]);
+
     const loadMore = async () => {
         if (nextCursor == null || loadingMore) return;
         setLoadingMore(true);
@@ -136,7 +183,7 @@ export default function TokenDetailTradeHistory({
                     No trades for this token yet.
                 </div>
             )}
-            {!loading && trades.length > 0 && (
+            {trades.length > 0 && (
                 <>
                     {/* Mobile: card list */}
                     <div className="md:hidden space-y-2">

@@ -71,14 +71,24 @@ contract Atomic(bytes20 poolOwnerPkh) {
         require(hash160(poolOwnerPk) == poolOwnerPkh);
         require(checkSig(poolOwnerSig, poolOwnerPk));
         
+        // Enforce that the pool UTXO continues to exist after removal and that
+        // at least ~0.01% of the tokens stay in the pool so the UI max (99.99%)
+        // matches the on-chain rule. We add a small tolerance ( + 9999 ) to
+        // account for integer rounding when the UI computes percentage-based
+        // withdrawals.
+        int currentTokens = tx.inputs[this.activeInputIndex].tokenAmount;
+        int remainingTokens = tx.outputs[this.activeInputIndex].tokenAmount;
+        require(remainingTokens > 0);
+        // remainingTokens / currentTokens >= ~0.0001
+        // => remainingTokens * 10000 (+ tolerance) >= currentTokens
+        require(remainingTokens * 10000 + 9999 >= currentTokens);
+        
         bytes inputToken = tx.inputs[this.activeInputIndex].tokenCategory;
-        if (tx.outputs[this.activeInputIndex].tokenAmount > 0) {
-            bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
-            require(inputToken == outputToken);
-            
-            bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
-            bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
-            require(inputBytecode == outputBytecode);
-        }
+        bytes outputToken = tx.outputs[this.activeInputIndex].tokenCategory;
+        require(inputToken == outputToken);
+        
+        bytes inputBytecode = tx.inputs[this.activeInputIndex].lockingBytecode;
+        bytes outputBytecode = tx.outputs[this.activeInputIndex].lockingBytecode;
+        require(inputBytecode == outputBytecode);
     }
 }

@@ -13,6 +13,7 @@ import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { getAddressExplorerUrl } from "@/dapp/explorer";
 import { cn } from "@/lib/utils";
+import { getSocket } from "@/lib/socket";
 
 type Direction = "bch_to_token" | "token_to_bch";
 
@@ -32,6 +33,7 @@ type SwapQuote = {
     outputAmount: number;
     priceImpact: number;
     effectivePrice: number;
+    spotPrice?: number;
     fee: number;
 };
 
@@ -40,6 +42,13 @@ const QUOTE_REFRESH_INTERVAL_MS = 20_000;
 type SwapPanelProps = {
     onSwapCompleted?: () => void;
     className?: string;
+    initialToken?: TokenOption | null;
+    /**
+     * When true, the panel will NOT override the initially selected token
+     * based on the URL (?token= or /swap/[tokenCategory]). Useful on the
+     * dedicated token detail page where the page itself controls identity.
+     */
+    disableUrlPreselect?: boolean;
 };
 
 function formatNumber(n: number, maxDecimals = 6): string {
@@ -265,7 +274,7 @@ function TokenSelectModal({
 }
 
 export default function SwapPanel(props: SwapPanelProps) {
-    const { onSwapCompleted, className } = props;
+    const { onSwapCompleted, className, initialToken, disableUrlPreselect } = props;
     const { address, isConnected, session, provider } = useWalletSession();
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -347,12 +356,12 @@ export default function SwapPanel(props: SwapPanelProps) {
             .sort((a, b) => (b.totalBchLiquidity ?? 0) - (a.totalBchLiquidity ?? 0));
     }, [overviewTokens]);
 
-    const [selectedToken, setSelectedToken] = useState<TokenOption | null>(null);
+    const [selectedToken, setSelectedToken] = useState<TokenOption | null>(initialToken ?? null);
     const [showTokenModal, setShowTokenModal] = useState(false);
 
     const [quote, setQuote] = useState<SwapQuote | null>(null);
     const [priceImpact, setPriceImpact] = useState<number | null>(null);
-    const [effectivePrice, setEffectivePrice] = useState<number | null>(null);
+    const [, setEffectivePrice] = useState<number | null>(null);
     const [spotPrice, setSpotPrice] = useState<number | null>(null);
     const [activePool, setActivePool] = useState<{
         ownerPkhHex: string;
@@ -384,8 +393,40 @@ export default function SwapPanel(props: SwapPanelProps) {
     const [lastEdited, setLastEdited] = useState<"input" | "output">("input");
     const quoteAbortRef = useRef<AbortController | null>(null);
 
-    // Preselect token from URL when pools data is ready
+    // Keep selectedToken in sync with initialToken.
+    // - If nothing selected yet, use initialToken directly
+    // - If category changed, replace completely
+    // - On token detail page (disableUrlPreselect=true), always merge latest fields
+    //   (including priceBch) for the same category so header/panel stay in sync.
+    // - On the generic swap page, only enrich identity once so we don't override
+    //   user-chosen tokens after they've switched.
     useEffect(() => {
+        if (!initialToken) return;
+        setSelectedToken(prev => {
+            if (!prev) return initialToken;
+            if (prev.category !== initialToken.category) return initialToken;
+
+            if (disableUrlPreselect) {
+                // Token detail page: keep same category but always refresh token fields.
+                return { ...prev, ...initialToken };
+            }
+
+            const prevHasIdentity = Boolean(prev.symbol || prev.name || prev.iconUrl);
+            const nextHasIdentity = Boolean(
+                initialToken.symbol || initialToken.name || initialToken.iconUrl,
+            );
+
+            if (!prevHasIdentity && nextHasIdentity) {
+                return { ...prev, ...initialToken };
+            }
+
+            return prev;
+        });
+    }, [initialToken, disableUrlPreselect]);
+
+    // Preselect token from URL when pools data is ready (unless explicitly disabled)
+    useEffect(() => {
+        if (disableUrlPreselect) return;
         if (!tokens.length) return;
         const tokenFromPath = pathname?.match(/^\/swap\/([a-fA-F0-9]+)$/)?.[1];
         const urlToken = searchParams?.get("token") ?? tokenFromPath;
@@ -397,7 +438,7 @@ export default function SwapPanel(props: SwapPanelProps) {
             toast.error("No pool found for the requested token.");
             setSelectedToken(null);
         }
-    }, [tokens, pathname, searchParams]);
+    }, [tokens, pathname, searchParams, disableUrlPreselect]);
 
     // Load user balances for percentage buttons (reuses portfolioBalances store with TTL)
     const ensureBalances = useCallback(() => {
@@ -557,6 +598,10 @@ export default function SwapPanel(props: SwapPanelProps) {
                         outputAmount: raw.outputAmount,
                         priceImpact: raw.priceImpact,
                         effectivePrice: raw.effectivePrice,
+                        spotPrice:
+                            typeof raw.spotPrice === "number" && Number.isFinite(raw.spotPrice)
+                                ? raw.spotPrice
+                                : undefined,
                         fee: feeVal,
                     });
                     setPriceImpact(raw.priceImpact);
@@ -619,6 +664,13 @@ export default function SwapPanel(props: SwapPanelProps) {
     // endpoint when page didn't provide price (e.g. token from list without detail). This avoids
     // redundant request and prevents overwriting with a different/lower-precision value.
     const fetchPrice = useTokenPriceStore(s => s.fetchPrice);
+    const selectedCategory = selectedToken?.category ?? null;
+    const cachedPrice = useTokenPriceStore(
+        useCallback(
+            s => (selectedCategory ? s.getCached(selectedCategory) : null),
+            [selectedCategory],
+        ),
+    );
     useEffect(() => {
         if (!selectedToken) {
             setSpotPrice(null);
@@ -642,6 +694,15 @@ export default function SwapPanel(props: SwapPanelProps) {
             cancelled = true;
         };
     }, [selectedToken, fetchPrice]);
+
+    // Keep local spotPrice in sync with the latest cached on-chain price so that
+    // when the global socket handler refreshes the token price store (e.g. after
+    // any swap event), all swap panels showing that token update together.
+    useEffect(() => {
+        if (!selectedCategory) return;
+        if (!cachedPrice) return;
+        setSpotPrice(roundBch(cachedPrice.marketPrice));
+    }, [selectedCategory, cachedPrice?.marketPrice]);
 
     const handleFlipDirection = () => {
         setDirection(d => (d === "bch_to_token" ? "token_to_bch" : "bch_to_token"));
@@ -685,13 +746,6 @@ export default function SwapPanel(props: SwapPanelProps) {
             }
 
             setOutputAmount(String(data.outputAmount ?? ""));
-            if (data.quote) {
-                setQuote(data.quote as SwapQuote);
-            } else {
-                setQuote(null);
-            }
-            setPriceImpact(typeof data.priceImpact === "number" ? data.priceImpact : null);
-            setEffectivePrice(typeof data.effectivePrice === "number" ? data.effectivePrice : null);
 
             const wcObj = JSON.parse(data.wcTransactionJson);
 
@@ -820,6 +874,11 @@ export default function SwapPanel(props: SwapPanelProps) {
                 if (!res.ok || cancelled) {
                     if (!cancelled) {
                         toast.error(data?.error || "Failed to fetch swap quote. Please try again.");
+                        // Clear stale quote/pool so details rows show "-"
+                        setQuote(null);
+                        setPriceImpact(null);
+                        setEffectivePrice(null);
+                        setActivePool(null);
                     }
                     return;
                 }
@@ -846,6 +905,11 @@ export default function SwapPanel(props: SwapPanelProps) {
                 if (!hasQuote || cancelled) {
                     if (!cancelled && !hasQuote) {
                         toast.error("Invalid quote response. Please try again.");
+                        // Clear stale quote/pool so details rows show "-"
+                        setQuote(null);
+                        setPriceImpact(null);
+                        setEffectivePrice(null);
+                        setActivePool(null);
                     }
                     return;
                 }
@@ -880,9 +944,11 @@ export default function SwapPanel(props: SwapPanelProps) {
                         ? err.message
                         : "Failed to fetch swap quote. Please try again.",
                 );
+                // On error, drop quote and pool so UI shows "-"
                 setQuote(null);
                 setPriceImpact(null);
                 setEffectivePrice(null);
+                setActivePool(null);
             } finally {
                 if (!cancelled) setIsQuoting(false);
                 quoteAbortRef.current = null;
@@ -1177,45 +1243,18 @@ export default function SwapPanel(props: SwapPanelProps) {
             {/* Details (price / fees / impact) */}
             {selectedToken && (
                 <div className="mt-3 rounded-[20px] border bg-popover px-4 py-3 text-xs space-y-1.5">
+                    {/* Global spot price: all pools weighted average */}
                     <div className="flex justify-between">
-                        <span className="text-muted-foreground">Price</span>
+                        <span className="text-muted-foreground">Spot price</span>
                         <span className="font-mono">
                             1 {selectedToken?.symbol ?? selectedToken?.name ?? "TOKEN"} ≈{" "}
                             {(() => {
-                                // We always want: 1 TOKEN = X BCH
-                                // Prefer live quote, but fall back cleanly to spot/overview price
-                                const overviewPrice =
-                                    typeof selectedToken?.priceBch === "number" &&
-                                    selectedToken.priceBch > 0
-                                        ? selectedToken.priceBch
+                                const spot =
+                                    typeof spotPrice === "number" && spotPrice > 0
+                                        ? spotPrice
                                         : null;
-                                const spot = spotPrice && spotPrice > 0 ? spotPrice : overviewPrice;
 
-                                if (quote) {
-                                    const rawEff =
-                                        effectivePrice && effectivePrice > 0
-                                            ? effectivePrice
-                                            : quote.effectivePrice;
-
-                                    // rawEff:
-                                    // - BCH_TO_TOKEN: BCH per token
-                                    // - TOKEN_TO_BCH: tokens per BCH (invert)
-                                    if (Number.isFinite(rawEff) && rawEff > 0) {
-                                        const bchPerToken =
-                                            direction === "bch_to_token" ? rawEff : 1 / rawEff;
-                                        if (Number.isFinite(bchPerToken) && bchPerToken > 0) {
-                                            return formatBchPrice(roundBch(bchPerToken));
-                                        }
-                                    }
-
-                                    // Degenerate quote (e.g. output ~0) → show spot price instead of "-"
-                                    if (spot) {
-                                        return formatBchPrice(spot);
-                                    }
-                                    return "-";
-                                }
-
-                                if (spot) {
+                                if (spot != null) {
                                     return formatBchPrice(spot);
                                 }
                                 return "-";
@@ -1223,9 +1262,75 @@ export default function SwapPanel(props: SwapPanelProps) {
                             BCH
                         </span>
                     </div>
-                    {activePool && (
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Pool</span>
+                    {/* Selected pool spot price (micro pool used for this quote) */}
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Pool price</span>
+                        <span className="font-mono">
+                            {(() => {
+                                if (!quote) return "-";
+
+                                // Prefer backend-provided pool spot price (BCH per token). If it is
+                                // missing, fall back to the global spot price for this token.
+                                const poolSpotRaw =
+                                    typeof quote.spotPrice === "number" &&
+                                    Number.isFinite(quote.spotPrice) &&
+                                    quote.spotPrice > 0
+                                        ? quote.spotPrice
+                                        : typeof selectedToken?.priceBch === "number" &&
+                                            selectedToken.priceBch > 0
+                                          ? selectedToken.priceBch
+                                          : null;
+
+                                const poolSpot =
+                                    poolSpotRaw != null && Number.isFinite(poolSpotRaw) && poolSpotRaw > 0
+                                        ? roundBch(poolSpotRaw)
+                                        : null;
+
+                                if (!poolSpot || !Number.isFinite(poolSpot) || poolSpot <= 0) {
+                                    return "-";
+                                }
+
+                                return `1 ${
+                                    selectedToken?.symbol ?? selectedToken?.name ?? "TOKEN"
+                                } ≈ ${formatBchPrice(roundBch(poolSpot))} BCH`;
+                            })()}
+                        </span>
+                    </div>
+                    {/* Quote price: always shown as 1 TOKEN ≈ X BCH (direction-agnostic) */}
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Quote price</span>
+                        <span className="font-mono">
+                            {(() => {
+                                if (!quote || quote.inputAmount <= 0 || quote.outputAmount <= 0) {
+                                    return "-";
+                                }
+
+                                // Derive BCH per token directly from the quoted amounts so that
+                                // this stays stable regardless of how the backend reports
+                                // effectivePrice for different directions.
+                                const rawBchPerToken =
+                                    direction === "bch_to_token"
+                                        ? quote.inputAmount / quote.outputAmount
+                                        : quote.outputAmount / quote.inputAmount;
+
+                                if (
+                                    !Number.isFinite(rawBchPerToken) ||
+                                    rawBchPerToken <= 0
+                                ) {
+                                    return "-";
+                                }
+
+                                const bchPerToken = roundBch(rawBchPerToken);
+
+                                return `1 ${
+                                    selectedToken?.symbol ?? selectedToken?.name ?? "TOKEN"
+                                } ≈ ${formatBchPrice(roundBch(bchPerToken))} BCH`;
+                            })()}
+                        </span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Selected pool</span>
+                        {quote && activePool ? (
                             <a
                                 href={getAddressExplorerUrl(
                                     activePool.address ?? activePool.ownerPkhHex,
@@ -1239,12 +1344,14 @@ export default function SwapPanel(props: SwapPanelProps) {
                                     ? `${activePool.address.slice(0, 6)}…${activePool.address.slice(-6)}`
                                     : `${activePool.ownerPkhHex.slice(0, 6)}…${activePool.ownerPkhHex.slice(-6)}`}
                             </a>
-                        </div>
-                    )}
+                        ) : (
+                            <span className="font-mono">-</span>
+                        )}
+                    </div>
                     <div className="flex justify-between">
-                        <span className="text-muted-foreground">Liquidity provider fee (0.3%)</span>
+                        <span className="text-muted-foreground">Price impact</span>
                         <span className="font-mono">
-                            {quote ? `${formatNumber(quote.fee, 8)} ${inputTokenLabel}` : "-"}
+                            {quote ? `${formatNumber(priceImpact ?? quote.priceImpact, 4)}%` : "-"}
                         </span>
                     </div>
                     <div className="flex justify-between">
@@ -1255,9 +1362,9 @@ export default function SwapPanel(props: SwapPanelProps) {
                         </span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-muted-foreground">Price impact</span>
+                        <span className="text-muted-foreground">Liquidity provider fee (0.3%)</span>
                         <span className="font-mono">
-                            {quote ? `${formatNumber(priceImpact ?? quote.priceImpact, 4)}%` : "-"}
+                            {quote ? `${formatNumber(quote.fee, 8)} ${inputTokenLabel}` : "-"}
                         </span>
                     </div>
                 </div>

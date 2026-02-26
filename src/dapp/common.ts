@@ -17,9 +17,6 @@ import {
     type NetworkProvider,
     type Utxo,
 } from "cashscript";
-import { compileFile } from "cashc";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 
 import {
     NETWORK_STRING,
@@ -31,6 +28,7 @@ import {
 
 import type { TokenMetadata, UnsignedTxTemplate } from "./types";
 import { cache } from "../lib/cache";
+import atomicArtifact from "./contracts/atomic.json";
 
 const electrumNetwork = NETWORK_STRING as "mainnet" | "testnet4" | "chipnet";
 
@@ -97,9 +95,7 @@ function createFailoverElectrumProvider(): NetworkProvider {
 
 export const provider: NetworkProvider = createFailoverElectrumProvider();
 
-const contractPath = join(dirname(fileURLToPath(import.meta.url)), "contracts", "atomic.cash");
-
-export const artifact = compileFile(contractPath);
+export const artifact = atomicArtifact;
 
 const TOKEN_DECIMALS_CACHE_PREFIX = "token:decimals:";
 const TOKEN_METADATA_CACHE_PREFIX = "token:metadata:";

@@ -33,6 +33,7 @@ type SwapBody = {
  * Body: { direction, tokenCategory, amount, slippageTolerance?, userTokenAddress }
  * Uses router.ts to find the best pool, then builds unsigned swap TX.
  */
+
 export async function POST(request: NextRequest) {
     let body: SwapBody;
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { direction, tokenCategory, amount, slippageTolerance, userTokenAddress, swapType } =
+    const { direction, tokenCategory, amount, slippageTolerance, swapType } =
         body;
 
     const auth = getAuthFromRequest(request);

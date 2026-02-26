@@ -10,7 +10,7 @@ type TokenPriceState = {
     fetchPrice: (
         tokenCategory: string,
     ) => Promise<{ hasMarketPools: boolean; marketPrice: number } | null>;
-    getCached: (tokenCategory: string) => { hasMarketPools: boolean; marketPrice: number } | null;
+    getCached: (tokenCategory: string) => PriceEntry | null;
     invalidate: (tokenCategory?: string) => void;
 };
 
@@ -49,7 +49,7 @@ export const useTokenPriceStore = create<TokenPriceState>((set, get) => ({
     getCached: (tokenCategory: string) => {
         const entry = get().cache[tokenCategory];
         if (!entry || Date.now() - entry.fetchedAt >= PRICE_TTL_MS) return null;
-        return { hasMarketPools: entry.hasMarketPools, marketPrice: entry.marketPrice };
+        return entry;
     },
 
     invalidate: (tokenCategory?: string) => {

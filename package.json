@@ -9,7 +9,8 @@
         "lint": "eslint",
         "format": "prettier --write \"./**/(*.tsx|*.ts|*.jsx|*.js|*.css|*.json)\"",
         "pm2": "pm2 start npm --name atomic-cash -- start",
-        "build:contracts": "cashc src/dapp/contracts/atomic.cash -o src/dapp/contracts/atomic.json"
+        "build:contracts": "cashc src/dapp/contracts/atomic.cash -o src/dapp/contracts/atomic.json",
+        "socket": "tsx socket-server/index.ts"
     },
     "dependencies": {
         "@bitauth/libauth": "^3.1.0-next.8",
@@ -37,7 +38,9 @@
         "react-qr-code": "^2.0.18",
         "sonner": "^2.0.7",
         "tailwind-merge": "^3.4.1",
-        "zustand": "^5.0.11"
+        "zustand": "^5.0.11",
+        "socket.io": "^4.8.1",
+        "socket.io-client": "^4.8.1"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4",

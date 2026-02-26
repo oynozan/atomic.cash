@@ -194,8 +194,11 @@ export interface PriceQuote {
     outputAmountRaw: bigint;
     outputType: "bch" | "token";
 
-    // Price impact
+    // Price impact (vs selected pool spot)
     priceImpact: number;
+
+    // Spot price of selected pool (1 token = x BCH)
+    spotPrice: number;
 
     // Fees
     feeAmount: number;

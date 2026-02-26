@@ -2,15 +2,16 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+
 import SwapPanel from "@/components/Swap/Panel";
 import TokenDetailHeader from "@/components/TokenDetail/Header";
 import TokenDetailPriceChart from "@/components/TokenDetail/PriceChart";
 import TokenDetailTradeHistory from "@/components/TokenDetail/TradeHistory";
 import TokenDetailInfo from "@/components/TokenDetail/Info";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
 import { useTokenPriceStore } from "@/store/tokenPrice";
+import { getSocket } from "@/lib/socket";
 
 type TokenDetailResponse = {
     tokenCategory: string;
@@ -38,30 +39,44 @@ export default function SwapTokenPage() {
         name?: string;
         iconUrl?: string;
     } | null>(null);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
 
     const overviewTokens = useTokensOverviewStore(s => s.data?.tokens ?? null);
+    const fetchTokensOverview = useTokensOverviewStore(s => s.fetch);
     const overviewToken = useMemo(
         () => overviewTokens?.find(t => t.tokenCategory === tokenCategory) ?? null,
         [overviewTokens, tokenCategory],
     );
 
+    // Ensure tokens overview is fetched at least once while the user is on a
+    // token detail page so that when they switch tokens, the header can use
+    // symbol/name/icon from the overview response instead of falling back to
+    // the generic "Token" placeholder.
+    useEffect(() => {
+        void fetchTokensOverview(false);
+    }, [fetchTokensOverview]);
+
     useEffect(() => {
         if (!tokenCategory) {
-            setLoading(false);
             return;
         }
         let cancelled = false;
 
         const run = async () => {
-            setLoading(true);
             setError(null);
-            const url = `/api/tokens/${encodeURIComponent(tokenCategory)}`;
             try {
-                const json = await fetchJsonOnce<TokenDetailResponse>(url);
-                if (!cancelled) setData(json);
+                const res = await fetch(
+                    `/api/tokens/${encodeURIComponent(tokenCategory)}?ts=${Date.now()}`,
+                    { cache: "no-store" },
+                );
+                if (!res.ok) {
+                    throw new Error("Failed to load token");
+                }
+                const json = (await res.json()) as TokenDetailResponse;
+                if (!cancelled) {
+                    setData(json);
+                }
             } catch (err: unknown) {
                 if (!cancelled) {
                     const message =
@@ -69,7 +84,7 @@ export default function SwapTokenPage() {
                     setError(message);
                 }
             } finally {
-                if (!cancelled) setLoading(false);
+                // no-op
             }
         };
 
@@ -111,6 +126,38 @@ export default function SwapTokenPage() {
             return prev;
         });
     }, [tokenCategory, data, overviewToken]);
+
+    // Listen for swap transactions for this token and refresh all token detail
+    // views (header, chart, history, info) when a new swap is recorded.
+    useEffect(() => {
+        if (!tokenCategory) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        type TxPayload = {
+            type?: string;
+            tokenCategory?: string;
+        };
+
+        const handleSwapTx = (payload: TxPayload) => {
+            if (!payload || payload.type !== "swap") return;
+            if (payload.tokenCategory !== tokenCategory) return;
+
+            // Trigger refetch for chart + history (via refreshKey)
+            setReloadKey(key => key + 1);
+
+            // Invalidate cached price and overview so other views stay fresh too.
+            useTokenPriceStore.getState().invalidate(tokenCategory);
+            useTokensOverviewStore.getState().invalidate();
+            void useTokensOverviewStore.getState().fetch(true);
+        };
+
+        socket.on("transaction:swap", handleSwapTx);
+
+        return () => {
+            socket.off("transaction:swap", handleSwapTx);
+        };
+    }, [tokenCategory]);
 
     if (!tokenCategory) {
         return (
@@ -210,14 +257,15 @@ export default function SwapTokenPage() {
                             <Suspense>
                                 <SwapPanel
                                     className="w-full mx-auto"
-                                    onSwapCompleted={() => {
-                                        setReloadKey(key => key + 1);
-                                        useTokenPriceStore
-                                            .getState()
-                                            .invalidate(tokenCategory ?? undefined);
-                                        useTokensOverviewStore.getState().invalidate();
-                                        void useTokensOverviewStore.getState().fetch(true);
+                                    initialToken={{
+                                        category: view.tokenCategory,
+                                        symbol: lastIdentity?.symbol ?? view.symbol,
+                                        name: lastIdentity?.name ?? view.name,
+                                        iconUrl: lastIdentity?.iconUrl ?? view.iconUrl,
+                                        priceBch: view.priceBch,
+                                        totalBchLiquidity: view.tvlBch,
                                     }}
+                                    disableUrlPreselect
                                 />
                             </Suspense>
                         </div>

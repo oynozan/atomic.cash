@@ -249,7 +249,17 @@ function RemoveLiquidityContent({
     const tokenLabel = pool.tokenSymbol ?? pool.tokenCategory.slice(0, 8) + "…";
 
     const pct = parseFloat(removePercentage);
-    const pctValid = Number.isFinite(pct) && pct > 0 && pct <= 100;
+    const pctValid = Number.isFinite(pct) && pct > 0 && pct < 100;
+
+    // Always keep "withdraw all" off inside the modal – we prefer leaving a
+    // small amount of liquidity in the pool so the token never disappears
+    // fully from the market. The UI instead offers a "Max" helper that sets
+    // a safe percentage (e.g. 99%).
+    useEffect(() => {
+        if (removeAll) {
+            setRemoveAll(false);
+        }
+    }, [removeAll, setRemoveAll]);
 
     let previewBch: number | null = null;
     let previewToken: number | null = null;
@@ -290,19 +300,31 @@ function RemoveLiquidityContent({
                         <span>%</span>
                     </div>
                 </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-                <input
-                    id="withdrawAll"
-                    type="checkbox"
-                    checked={removeAll}
-                    onChange={e => setRemoveAll(e.target.checked)}
-                    className="rounded"
-                />
-                <label htmlFor="withdrawAll" className="text-xs text-muted-foreground">
-                    Withdraw all liquidity
-                </label>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="text-muted-foreground">Quick amounts:</span>
+                    {[25, 50, 75].map(v => (
+                        <button
+                            key={v}
+                            type="button"
+                            onClick={() => setRemovePercentage(String(v))}
+                            className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
+                        >
+                            {v}%
+                        </button>
+                    ))}
+                    <button
+                        type="button"
+                        onClick={() => setRemovePercentage("99.99")}
+                        className="rounded-full border bg-background/40 px-2 py-0.5 hover:bg-background/70"
+                    >
+                        Max
+                    </button>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                    To keep the token tradeable and avoid effectively removing it from the market,
+                    we recommend leaving a small amount of liquidity in the pool (for example
+                    withdrawing at most 99.99%).
+                </p>
             </div>
 
             {previewBch !== null && previewToken !== null && (
@@ -321,7 +343,7 @@ function RemoveLiquidityContent({
             <Button
                 type="button"
                 className="w-full"
-                disabled={txLoading || (!removeAll && !pctValid)}
+                disabled={txLoading || !pctValid}
                 variant="destructive"
                 onClick={() =>
                     handleRemoveLiquidity(
@@ -443,16 +465,12 @@ async function handleRemoveLiquidity(
         tokenCategory: pool.tokenCategory,
     };
 
-    if (withdrawAll) {
-        body.withdrawAll = true;
-    } else {
-        const pct = parseFloat(percentage);
-        if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-            toast.error("Percentage must be between 1 and 100.");
-            return;
-        }
-        body.percentage = pct;
+    const pct = parseFloat(percentage);
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
+        toast.error("Percentage must be between 0 and 99.99.");
+        return;
     }
+    body.percentage = pct;
 
     setTxLoading(true);
     try {
@@ -540,7 +558,6 @@ export default function ManagePoolsPage() {
     const { address, isConnected, session, provider } = useWalletSession();
     const fetchUserPools = useUserPoolsStore(s => s.fetch);
     const byAddress = useUserPoolsStore(s => s.byAddress);
-    const removeUserPool = useUserPoolsStore(s => s.removePool);
     const loadingByAddress = useUserPoolsStore(s => s.loading);
     const errorByAddress = useUserPoolsStore(s => s.error);
 
