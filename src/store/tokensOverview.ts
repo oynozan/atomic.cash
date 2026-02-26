@@ -2,8 +2,6 @@ import { create } from "zustand";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 
 const TOKENS_OVERVIEW_TTL_MS = 30_000; // 30 seconds – backend cache already protects heavy work
-const TOKENS_OVERVIEW_AUTO_REFRESH_MS = 30_000;
-let tokensOverviewAutoRefreshStarted = false;
 
 export type TokenOverview = {
     tokenCategory: string;
@@ -48,18 +46,6 @@ export const useTokensOverviewStore = create<TokensOverviewState>((set, get) => 
         try {
             const json = await fetchJsonOnce<TokensOverviewResponse>("/api/tokens/overview");
             set({ data: json, error: null, fetchedAt: Date.now() });
-
-            if (!tokensOverviewAutoRefreshStarted && typeof window !== "undefined") {
-                tokensOverviewAutoRefreshStarted = true;
-                window.setInterval(() => {
-                    const state = get();
-                    const { fetchedAt: fa } = state;
-                    if (!fa || Date.now() - fa >= TOKENS_OVERVIEW_TTL_MS) {
-                        void state.fetch(false);
-                    }
-                }, TOKENS_OVERVIEW_AUTO_REFRESH_MS);
-            }
-
             return json;
         } catch (err) {
             set({
@@ -75,3 +61,4 @@ export const useTokensOverviewStore = create<TokensOverviewState>((set, get) => 
         set({ fetchedAt: null });
     },
 }));
+

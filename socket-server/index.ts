@@ -72,9 +72,13 @@ io.on("connection", socket => {
             broadcastedAt: Date.now(),
         };
 
-        // Type-specific channel, e.g. "transaction:swap_prepared"
-        if (type && typeof type === "string") {
-            io.emit(`transaction:${type}`, enriched);
+        // Generic transaction stream — trigger-only, no payload needed on clients.
+        io.emit("transaction");
+
+        // For now, only swaps need the full enriched payload on the
+        // type-specific channel (used by token detail trade history, etc.).
+        if (type === "swap") {
+            io.emit("transaction:swap", enriched);
         }
     });
 

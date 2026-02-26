@@ -15,6 +15,7 @@ import {
 
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { formatBchAmount } from "@/lib/utils";
+import { getSocket } from "@/lib/socket";
 
 type HistoryPoint = { timestamp: number; tvlBch: number; volumeBch: number };
 
@@ -38,6 +39,7 @@ export default function TvlVolumeChart() {
     const [data, setData] = useState<TvlVolumeHistoryResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -75,7 +77,22 @@ export default function TvlVolumeChart() {
         return () => {
             cancelled = true;
         };
-    }, [range]);
+    }, [range, refreshKey]);
+
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const handleTvlEvent = () => {
+            setRefreshKey(key => key + 1);
+        };
+
+        socket.on("transaction", handleTvlEvent);
+
+        return () => {
+            socket.off("transaction", handleTvlEvent);
+        };
+    }, []);
 
     useEffect(() => {
         const container = containerRef.current;

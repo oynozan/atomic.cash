@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
 import { useVolumeStore } from "@/store/volume";
 import { formatBchAmount } from "@/lib/utils";
+import { getSocket } from "@/lib/socket";
 
 function formatPercentChange(
     current: number,
@@ -31,6 +32,7 @@ export default function StatsOverview() {
 
     const loading = volumeLoading;
     const error = volumeError;
+    const hasData = !!volumeData;
     const tvlBch = volumeData?.tvlBch ?? 0;
     const prev24Tvl = volumeData?.prev24hTvlBch ?? 0;
     const prev30Tvl = volumeData?.prev30dTvlBch ?? 0;
@@ -44,7 +46,31 @@ export default function StatsOverview() {
     const change24 = formatPercentChange(vol24, prev24);
     const change30 = formatPercentChange(vol30, prev30);
 
-    const showPlaceholder = loading || error;
+    // Only show placeholder dots while we have no data yet; once we have a
+    // snapshot, keep it visible during background refreshes to avoid flicker.
+    const showPlaceholder = !hasData && (loading || !!error);
+
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const handleVolumeStatsTx = () => {
+            const store = useVolumeStore.getState();
+            store.invalidate();
+            void store.fetch(true);
+        };
+
+        // Volume should only be driven by swaps, but TVL is also affected by
+        // pool creation and liquidity add/remove. All of these share the same
+        // aggregated endpoint, so we refresh on each relevant event. This means
+        // volume numbers will also update when TVL is refreshed, which is
+        // acceptable given the shared API.
+        socket.on("transaction", handleVolumeStatsTx);
+
+        return () => {
+            socket.off("transaction", handleVolumeStatsTx);
+        };
+    }, []);
 
     return (
         <section className="w-full mt-4">

@@ -696,13 +696,44 @@ export default function SwapPanel(props: SwapPanelProps) {
     }, [selectedToken, fetchPrice]);
 
     // Keep local spotPrice in sync with the latest cached on-chain price so that
-    // when the global socket handler refreshes the token price store (e.g. after
-    // any swap event), all swap panels showing that token update together.
+    // when the socket-driven token price store refreshes (e.g. after any swap
+    // event), all swap panels showing that token update together.
     useEffect(() => {
         if (!selectedCategory) return;
         if (!cachedPrice) return;
         setSpotPrice(roundBch(cachedPrice.marketPrice));
     }, [selectedCategory, cachedPrice?.marketPrice]);
+
+    // Panel-local safety net: listen to swap transactions for the currently
+    // selected token and force-refresh its on-chain spot price in the global
+    // token price store. This ensures the homepage swap panel (which doesn't
+    // have a dedicated token detail header) still picks up price changes even
+    // if other socket listeners are not mounted.
+    useEffect(() => {
+        if (!selectedCategory) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        type TxPayload = {
+            type?: string;
+            tokenCategory?: string;
+        };
+
+        const handleSwapTx = (payload: TxPayload) => {
+            if (!payload || payload.type !== "swap") return;
+            if (payload.tokenCategory !== selectedCategory) return;
+
+            const store = useTokenPriceStore.getState();
+            store.invalidate(selectedCategory);
+            void store.fetchPrice(selectedCategory);
+        };
+
+        socket.on("transaction:swap", handleSwapTx);
+
+        return () => {
+            socket.off("transaction:swap", handleSwapTx);
+        };
+    }, [selectedCategory]);
 
     const handleFlipDirection = () => {
         setDirection(d => (d === "bch_to_token" ? "token_to_bch" : "bch_to_token"));

@@ -39,7 +39,7 @@ export default function TokenDetailInfo({
     const bcmrUrl = explorerUrl;
 
     return (
-        <div className="rounded-[24px] border bg-popover p-5 flex flex-col gap-5">
+        <div className="rounded-[24px] border bg-popover p-5 flex flex-col gap-6">
             <h2 className="text-sm font-semibold text-foreground">Info</h2>
 
             {description && <p className="text-xs text-muted-foreground">{description}</p>}

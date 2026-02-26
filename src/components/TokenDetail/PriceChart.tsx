@@ -16,7 +16,7 @@ import {
 } from "lightweight-charts";
 
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
-import { formatBchPrice } from "@/lib/utils";
+import { formatBchAmount, formatBchPrice } from "@/lib/utils";
 
 type Point = { timestamp: number; priceBch: number; volume?: number };
 
@@ -212,7 +212,10 @@ export default function PriceChart({
         chartRef.current = chart;
 
         const volumeSeries = chart.addSeries(HistogramSeries, {
-            priceFormat: { type: "volume" },
+            priceFormat: {
+                type: "custom",
+                formatter: (p: number) => formatBchAmount(p),
+            },
             priceScaleId: "",
         });
         volumeSeries.priceScale().applyOptions({

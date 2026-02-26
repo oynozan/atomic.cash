@@ -75,7 +75,7 @@ export default function TokenDetailTradeHistory({
         const run = async () => {
             setLoading(true);
             setError(null);
-            const url = `/api/trades/recent?limit=20&tokenCategory=${encodeURIComponent(
+            const url = `/api/trades/recent?limit=9&tokenCategory=${encodeURIComponent(
                 tokenCategory,
             )}`;
             try {
@@ -150,7 +150,7 @@ export default function TokenDetailTradeHistory({
     const loadMore = async () => {
         if (nextCursor == null || loadingMore) return;
         setLoadingMore(true);
-        const url = `/api/trades/recent?limit=20&tokenCategory=${encodeURIComponent(
+        const url = `/api/trades/recent?limit=10&tokenCategory=${encodeURIComponent(
             tokenCategory,
         )}&cursor=${nextCursor}`;
         try {
@@ -345,16 +345,14 @@ export default function TokenDetailTradeHistory({
                         </div>
                     </div>
                     {nextCursor != null && (
-                        <div className="flex justify-center pt-2 pb-1">
-                            <button
-                                type="button"
-                                onClick={loadMore}
-                                disabled={loadingMore}
-                                className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                            >
-                                {loadingMore ? "Loading…" : "Load more"}
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={loadMore}
+                            disabled={loadingMore}
+                            className="mt-2 self-center inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors disabled:opacity-50"
+                        >
+                            {loadingMore ? "Loading…" : "Load more"}
+                        </button>
                     )}
                 </>
             )}

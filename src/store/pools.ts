@@ -19,6 +19,14 @@ export type PoolsResponse = {
     totalPools: number;
     totalBchLiquidity: number;
     tokenCounts: Record<string, number>;
+    /** Current page (1-based) returned by the backend */
+    page: number;
+    /** Page size used by the backend */
+    pageSize: number;
+    /** Total unique token categories across all pools */
+    totalTokenCategories: number;
+    /** Total pages for the given pageSize */
+    totalPages: number;
     pools: ApiPool[];
 };
 
@@ -27,7 +35,7 @@ type PoolsState = {
     error: string | null;
     loading: boolean;
     fetchedAt: number | null;
-    fetch: (force?: boolean) => Promise<PoolsResponse | null>;
+    fetch: (force?: boolean, page?: number, pageSize?: number) => Promise<PoolsResponse | null>;
     invalidate: () => void;
 };
 
@@ -37,16 +45,21 @@ export const usePoolsStore = create<PoolsState>((set, get) => ({
     loading: false,
     fetchedAt: null,
 
-    fetch: async (force = false) => {
+    fetch: async (force = false, page?: number, pageSize?: number) => {
         const { data, fetchedAt } = get();
         const now = Date.now();
         if (!force && data && fetchedAt != null && now - fetchedAt < POOLS_TTL_MS) {
             return data;
         }
 
+        const params = new URLSearchParams();
+        if (page != null) params.set("page", String(page));
+        if (pageSize != null) params.set("pageSize", String(pageSize));
+        const url = params.size ? `/api/pools?${params.toString()}` : "/api/pools";
+
         set({ loading: true, error: null });
         try {
-            const json = await fetchJsonOnce<PoolsResponse>("/api/pools");
+            const json = await fetchJsonOnce<PoolsResponse>(url);
             set({ data: json, error: null, fetchedAt: Date.now() });
             return json;
         } catch (err) {

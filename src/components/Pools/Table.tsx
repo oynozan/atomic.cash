@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatBchPrice } from "@/lib/utils";
 import { usePoolsStore, type ApiPool } from "@/store/pools";
 import { getAddressExplorerUrl } from "@/dapp/explorer";
+import { getSocket } from "@/lib/socket";
 
 const PAGE_SIZE = 10;
 
@@ -28,11 +29,29 @@ function formatNumber(n: number, maxDecimals = 4): string {
 export default function PoolsTable() {
     const { data, loading, error, fetch: fetchPools } = usePoolsStore();
     const [expandedToken, setExpandedToken] = useState<string | null>(null);
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    const [page, setPage] = useState(1);
 
     useEffect(() => {
-        fetchPools();
-    }, [fetchPools]);
+        // Initial load and page changes – ask backend for the current page.
+        void fetchPools(true, page, PAGE_SIZE);
+    }, [fetchPools, page]);
+
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const handlePoolsTx = () => {
+            const store = usePoolsStore.getState();
+            const currentPage = store.data?.page ?? 1;
+            void store.fetch(true, currentPage, PAGE_SIZE);
+        };
+
+        socket.on("transaction", handlePoolsTx);
+
+        return () => {
+            socket.off("transaction", handlePoolsTx);
+        };
+    }, []);
 
     const grouped = useMemo(() => {
         if (!data) return [];
@@ -69,14 +88,20 @@ export default function PoolsTable() {
         return Array.from(map.values()).sort((a, b) => b.totalBch - a.totalBch);
     }, [data]);
 
-    const visibleGroups = useMemo(
-        () => grouped.slice(0, visibleCount),
-        [grouped, visibleCount],
-    );
+    const totalTokenCategories = data?.totalTokenCategories ?? grouped.length;
+    const totalPages =
+        totalTokenCategories === 0
+            ? 1
+            : Math.max(1, Math.ceil(totalTokenCategories / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages);
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = Math.min(startIndex + PAGE_SIZE, totalTokenCategories);
 
-    const hasMore = grouped.length > visibleCount;
+    const visibleGroups = grouped;
 
-    if (loading) {
+    const showInitialLoading = loading && !data;
+
+    if (showInitialLoading) {
         return (
             <div className="flex flex-col gap-6 rounded-[24px] border bg-popover p-8 text-center text-muted-foreground">
                 Loading pools…
@@ -106,7 +131,10 @@ export default function PoolsTable() {
                 <div className="text-sm text-muted-foreground">
                     <span className="font-semibold text-foreground">{data.totalPools}</span> micro
                     pools across{" "}
-                    <span className="font-semibold text-foreground">{grouped.length}</span> tokens
+                    <span className="font-semibold text-foreground">
+                        {totalTokenCategories}
+                    </span>{" "}
+                    tokens
                 </div>
                 <div className="text-sm text-muted-foreground">
                     Total liquidity:{" "}
@@ -129,16 +157,49 @@ export default function PoolsTable() {
                 />
             ))}
 
-            {hasMore && (
-                <button
-                    type="button"
-                    onClick={() =>
-                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, grouped.length))
-                    }
-                    className="self-center mt-2 inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
-                >
-                    Load more
-                </button>
+            {totalPages > 1 && (
+                <div className="mt-2 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        Showing{" "}
+                        <span className="font-mono text-foreground">
+                            {startIndex + 1}–{endIndex}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-mono text-foreground">
+                            {totalTokenCategories}
+                        </span>{" "}
+                        tokens
+                    </div>
+                    <div className="inline-flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setPage(prev => (prev > 1 ? prev - 1 : prev))
+                            }
+                            disabled={currentPage === 1}
+                            className="inline-flex items-center justify-center rounded-full border bg-background/60 px-3 py-1 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Previous
+                        </button>
+                        <span>
+                            Page{" "}
+                            <span className="font-mono text-foreground">{currentPage}</span> of{" "}
+                            <span className="font-mono text-foreground">{totalPages}</span>
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setPage(prev =>
+                                    prev < totalPages ? prev + 1 : prev,
+                                )
+                            }
+                            disabled={currentPage === totalPages}
+                            className="inline-flex items-center justify-center rounded-full border bg-background/60 px-3 py-1 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 
 import { getExplorerUrl } from "@/dapp/explorer";
-import { useTradesStore, type StoredTrade, type TokenMeta } from "@/store/trades";
+import { useTradesStore, type StoredTrade, type TradesResponse } from "@/store/trades";
+import { getSocket } from "@/lib/socket";
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -39,6 +40,63 @@ export default function TradesTable() {
     useEffect(() => {
         void fetchTrades();
     }, [fetchTrades]);
+
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        type TxPayload = {
+            type?: string;
+            tokenCategory?: string;
+            txid?: string;
+            address?: string;
+            direction?: StoredTrade["direction"];
+            amounts?: StoredTrade["amounts"];
+            createdAt?: number;
+        };
+
+        const handleSwapTx = (payload: TxPayload) => {
+            if (!payload || payload.type !== "swap") return;
+            if (!payload.txid || !payload.address || !payload.createdAt) return;
+
+            const tx: StoredTrade = {
+                txid: payload.txid,
+                address: payload.address,
+                type: "swap",
+                direction: payload.direction,
+                tokenCategory: payload.tokenCategory,
+                amounts: payload.amounts,
+                createdAt: payload.createdAt,
+            };
+
+            const store = useTradesStore.getState();
+            const current = store.data;
+
+            // If we don't have an initial snapshot yet, fall back to a single
+            // refetch so the table can hydrate properly.
+            if (!current) {
+                void store.fetch(true);
+                return;
+            }
+
+            // Deduplicate by txid in case this event is received more than once.
+            if (current.trades.some(t => t.txid === tx.txid)) return;
+
+            const next: TradesResponse = {
+                ...current,
+                trades: [tx, ...current.trades],
+                total: current.total + 1,
+            };
+
+            useTradesStore.setState({ data: next });
+        };
+
+        socket.on("transaction:swap", handleSwapTx);
+
+        return () => {
+            socket.off("transaction:swap", handleSwapTx);
+        };
+    }, []);
 
     const trades = data?.trades ?? [];
     const tokenMeta = data?.tokenMeta ?? {};

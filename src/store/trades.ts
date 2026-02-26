@@ -36,7 +36,7 @@ type TradesState = {
     error: string | null;
     loading: boolean;
     fetchedAt: number | null;
-    fetch: () => Promise<TradesResponse | null>;
+    fetch: (force?: boolean) => Promise<TradesResponse | null>;
     invalidate: () => void;
 };
 
@@ -48,10 +48,10 @@ export const useTradesStore = create<TradesState>((set, get) => ({
     loading: false,
     fetchedAt: null,
 
-    fetch: async () => {
+    fetch: async (force = false) => {
         const { data, fetchedAt } = get();
         const now = Date.now();
-        if (data && fetchedAt != null && now - fetchedAt < TRADES_TTL_MS) {
+        if (!force && data && fetchedAt != null && now - fetchedAt < TRADES_TTL_MS) {
             return data;
         }
 
@@ -71,7 +71,7 @@ export const useTradesStore = create<TradesState>((set, get) => ({
     },
 
     invalidate: () => {
-        set({ data: null, error: null, fetchedAt: null });
+        set({ fetchedAt: null });
     },
 }));
 

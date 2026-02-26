@@ -1,15 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import { formatBchPrice } from "@/lib/utils";
-import type { TokenOverview } from "@/store/tokensOverview";
 
-type TokensOverviewResponse = {
-    tokens: TokenOverview[];
-    total: number;
-};
+import { formatBchPrice } from "@/lib/utils";
+import { useTokensOverviewStore, type TokenOverview } from "@/store/tokensOverview";
+import { getSocket } from "@/lib/socket";
 
 function formatNumber(n: number | null, maxDecimals = 6): string {
     if (n == null || !Number.isFinite(n)) return "-";
@@ -28,7 +25,7 @@ function formatNumber(n: number | null, maxDecimals = 6): string {
 }
 
 function formatPercent(n: number | null): { label: string; positive: boolean } {
-    // Treat null / NaN / ~0 as \"no change\" and show \"–\"
+    // Treat null / NaN / ~0 as "no change" and show "–"
     if (n == null || !Number.isFinite(n) || Math.abs(n) < 0.005) {
         return { label: "–", positive: true };
     }
@@ -42,14 +39,13 @@ export default function TokensTable() {
         "tvl" | "priceAsc" | "priceDesc" | "gainers" | "losers" | "volume"
     >("tvl");
 
-    // Local paginated token state (backend-driven).
-    const [tokens, setTokens] = useState<TokenOverview[]>([]);
-    const [total, setTotal] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [offset, setOffset] = useState(0);
+    // Global tokens overview snapshot from zustand store.
+    const overviewData = useTokensOverviewStore(s => s.data);
+    const loading = useTokensOverviewStore(s => s.loading);
+    const error = useTokensOverviewStore(s => s.error);
+    const fetchOverview = useTokensOverviewStore(s => s.fetch);
 
-    // Debounced search value used for backend queries.
+    // Debounced search value used for client-side filtering.
     const [debouncedSearch, setDebouncedSearch] = useState("");
 
     useEffect(() => {
@@ -61,51 +57,52 @@ export default function TokensTable() {
 
     const PAGE_SIZE = 20;
 
-    const loadPage = useCallback(
-        async (startOffset: number, q: string, replace: boolean) => {
-            setLoading(true);
-            setError(null);
-            try {
-                const params = new URLSearchParams();
-                params.set("limit", String(PAGE_SIZE));
-                if (startOffset > 0) params.set("offset", String(startOffset));
-                if (q) params.set("q", q);
+    // Initial load of the global overview snapshot.
+    useEffect(() => {
+        void fetchOverview();
+    }, [fetchOverview]);
 
-                const res = await fetch(`/api/tokens/overview?${params.toString()}`);
-                if (!res.ok) {
-                    throw new Error("Failed to load tokens");
-                }
-                const json = (await res.json()) as TokensOverviewResponse;
+    // Socket-driven refresh: when swaps or pool/liquidity events happen, refresh
+    // the first page in the background so token prices/TVL/volume stay fresh
+    // without needing a global auto-refresh interval.
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
 
-                setTotal(json.total);
-                setOffset(startOffset + json.tokens.length);
+        const handleTokensOverviewEvent = () => {
+            const store = useTokensOverviewStore.getState();
+            store.invalidate();
+            void store.fetch(true);
+        };
 
-                setTokens(prev => {
-                    if (replace) return json.tokens;
-                    const existing = new Set(prev.map(t => t.tokenCategory));
-                    const appended = json.tokens.filter(t => !existing.has(t.tokenCategory));
-                    return [...prev, ...appended];
-                });
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to load tokens");
-            } finally {
-                setLoading(false);
-            }
-        },
-        [],
+        socket.on("transaction", handleTokensOverviewEvent);
+
+        return () => {
+            socket.off("transaction", handleTokensOverviewEvent);
+        };
+    }, []);
+
+    const allTokens = useMemo(
+        () => overviewData?.tokens ?? [],
+        [overviewData?.tokens],
     );
 
-    // Initial load and when debounced search changes.
-    useEffect(() => {
-        // Reset offset for the new query but keep current tokens visible
-        // until the new results arrive, so the header/search UI does not "shrink".
-        setOffset(0);
-        void loadPage(0, debouncedSearch, true);
-    }, [debouncedSearch, loadPage]);
-
     const filteredTokens = useMemo(() => {
-        // Sort the currently loaded tokens on the client.
-        const sorted = [...tokens];
+        // Apply client-side search over the full snapshot first.
+        const q = debouncedSearch.trim().toLowerCase();
+        let base: TokenOverview[] = allTokens;
+        if (q) {
+            base = base.filter(t => {
+                const symbol = t.symbol ?? "";
+                const name = t.name ?? "";
+                const category = t.tokenCategory;
+                const haystack = `${symbol} ${name} ${category}`.toLowerCase();
+                return haystack.includes(q);
+            });
+        }
+
+        // Then sort the filtered list on the client.
+        const sorted = [...base];
         if (sortMode === "tvl") {
             sorted.sort((a, b) => b.tvlBch - a.tvlBch);
         } else if (sortMode === "priceAsc") {
@@ -128,7 +125,7 @@ export default function TokensTable() {
             sorted.sort((a, b) => b.volume30dBch - a.volume30dBch);
         }
         return sorted;
-    }, [tokens, sortMode]);
+    }, [allTokens, debouncedSearch, sortMode]);
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     const visibleTokens = useMemo(
@@ -136,17 +133,12 @@ export default function TokensTable() {
         [filteredTokens, visibleCount],
     );
 
-    // Reset pagination when search or sort mode changes so we always start
-    // from the first "page" of the current result set.
-    useEffect(() => {
-        setVisibleCount(PAGE_SIZE);
-    }, [debouncedSearch, sortMode]);
+    // There are more tokens to show whenever our current visible window
+    // is smaller than the filtered list. All data is loaded from the
+    // global overview snapshot; "Load more" only reveals more locally.
+    const hasMore = filteredTokens.length > visibleCount;
 
-    // There are more results on the backend if our current offset is
-    // still behind the reported total.
-    const hasMore = offset < total;
-
-    if (!debouncedSearch && loading && !tokens.length) {
+    if (!debouncedSearch && loading && !allTokens.length) {
         return (
             <div className="rounded-[24px] border bg-popover flex items-center justify-center py-10 px-6 text-muted-foreground">
                 Loading tokens…
@@ -163,7 +155,7 @@ export default function TokensTable() {
     }
 
     // No tokens at all (and not searching): show a simple empty state.
-    if (!debouncedSearch && !tokens.length && !loading) {
+    if (!debouncedSearch && !allTokens.length && !loading) {
         return (
             <div className="rounded-[24px] border bg-popover py-6 px-6 text-sm text-muted-foreground">
                 No tokens yet.
@@ -179,7 +171,10 @@ export default function TokensTable() {
                     <div className="flex flex-wrap items-center gap-1 rounded-full border bg-background/40 px-1 py-0.5 text-[11px]">
                         <button
                             type="button"
-                            onClick={() => setSortMode("tvl")}
+                            onClick={() => {
+                                setSortMode("tvl");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "tvl"
                                     ? "bg-primary text-primary-foreground"
@@ -190,7 +185,10 @@ export default function TokensTable() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setSortMode("priceDesc")}
+                            onClick={() => {
+                                setSortMode("priceDesc");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "priceDesc"
                                     ? "bg-amber-400 text-amber-950"
@@ -201,7 +199,10 @@ export default function TokensTable() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setSortMode("priceAsc")}
+                            onClick={() => {
+                                setSortMode("priceAsc");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "priceAsc"
                                     ? "bg-amber-600 text-amber-50"
@@ -212,7 +213,10 @@ export default function TokensTable() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setSortMode("gainers")}
+                            onClick={() => {
+                                setSortMode("gainers");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "gainers"
                                     ? "bg-emerald-500 text-emerald-950"
@@ -223,7 +227,10 @@ export default function TokensTable() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setSortMode("losers")}
+                            onClick={() => {
+                                setSortMode("losers");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "losers"
                                     ? "bg-red-500 text-red-50"
@@ -234,7 +241,10 @@ export default function TokensTable() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setSortMode("volume")}
+                            onClick={() => {
+                                setSortMode("volume");
+                                setVisibleCount(PAGE_SIZE);
+                            }}
                             className={`px-2 py-0.5 rounded-full ${
                                 sortMode === "volume"
                                     ? "bg-sky-500 text-sky-950"
@@ -248,7 +258,10 @@ export default function TokensTable() {
                 <input
                     type="text"
                     value={search}
-                    onChange={e => setSearch(e.target.value)}
+                    onChange={e => {
+                        setSearch(e.target.value);
+                        setVisibleCount(PAGE_SIZE);
+                    }}
                     placeholder="Search tokens"
                     className="w-full min-w-0 rounded-full border bg-background/40 px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground/70 md:w-56"
                 />
@@ -266,7 +279,7 @@ export default function TokensTable() {
 
             {/* Mobile: card list */}
             <div className="md:hidden space-y-2">
-                {visibleTokens.map((t) => {
+                {visibleTokens.map(t => {
                     const change1d = formatPercent(t.change1dPercent);
                     return (
                         <Link
@@ -340,97 +353,97 @@ export default function TokensTable() {
                 </div>
 
                 <div className="divide-y divide-border/40">
-                {visibleTokens.map((t, idx) => {
-                    const change1d = formatPercent(t.change1dPercent);
-                    const change7d = formatPercent(t.change7dPercent);
+                    {visibleTokens.map((t, idx) => {
+                        const change1d = formatPercent(t.change1dPercent);
+                        const change7d = formatPercent(t.change7dPercent);
 
-                    return (
-                        <Link
-                            key={t.tokenCategory}
-                            href={`/swap/${t.tokenCategory}`}
-                            className="grid grid-cols-[40px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.6fr)] items-center px-3 py-3 text-xs hover:bg-background/40 transition-colors cursor-pointer"
-                        >
-                            <div className="text-[11px] text-muted-foreground">{idx + 1}</div>
+                        return (
+                            <Link
+                                key={t.tokenCategory}
+                                href={`/swap/${t.tokenCategory}`}
+                                className="grid grid-cols-[40px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.6fr)] items-center px-3 py-3 text-xs hover:bg-background/40 transition-colors cursor-pointer"
+                            >
+                                <div className="text-[11px] text-muted-foreground">{idx + 1}</div>
 
-                            {/* Token name */}
-                            <div className="flex items-center gap-2">
-                                {t.iconUrl && (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                        src={t.iconUrl}
-                                        alt={t.symbol}
-                                        className="size-6 rounded-full object-cover border border-background/40"
-                                    />
-                                )}
-                                <div className="flex flex-col">
-                                    <span className="text-xs font-medium">
-                                        {t.name ?? t.symbol ?? "Token"}
-                                    </span>
-                                    <span className="text-[11px] text-muted-foreground">
-                                        {t.symbol ?? t.tokenCategory.slice(0, 6)}
+                                {/* Token name */}
+                                <div className="flex items-center gap-2">
+                                    {t.iconUrl && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={t.iconUrl}
+                                            alt={t.symbol}
+                                            className="size-6 rounded-full object-cover border border-background/40"
+                                        />
+                                    )}
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-medium">
+                                            {t.name ?? t.symbol ?? "Token"}
+                                        </span>
+                                        <span className="text-[11px] text-muted-foreground">
+                                            {t.symbol ?? t.tokenCategory.slice(0, 6)}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Price */}
+                                <div className="font-mono text-[11px]">
+                                    {formatBchPrice(t.priceBch)} BCH
+                                </div>
+
+                                {/* 1 day */}
+                                <div className="flex items-center gap-1">
+                                    {change1d.label !== "–" &&
+                                        (change1d.positive ? (
+                                            <ArrowUpRight className="size-3 text-emerald-400" />
+                                        ) : (
+                                            <ArrowDownRight className="size-3 text-red-400" />
+                                        ))}
+                                    <span
+                                        className={
+                                            change1d.label === "–"
+                                                ? "text-[11px] text-muted-foreground"
+                                                : change1d.positive
+                                                  ? "text-[11px] text-emerald-400"
+                                                  : "text-[11px] text-red-400"
+                                        }
+                                    >
+                                        {change1d.label}
                                     </span>
                                 </div>
-                            </div>
 
-                            {/* Price */}
-                            <div className="font-mono text-[11px]">
-                                {formatBchPrice(t.priceBch)} BCH
-                            </div>
+                                {/* 7 days */}
+                                <div className="flex items-center gap-1">
+                                    {change7d.label !== "–" &&
+                                        (change7d.positive ? (
+                                            <ArrowUpRight className="size-3 text-emerald-400" />
+                                        ) : (
+                                            <ArrowDownRight className="size-3 text-red-400" />
+                                        ))}
+                                    <span
+                                        className={
+                                            change7d.label === "–"
+                                                ? "text-[11px] text-muted-foreground"
+                                                : change7d.positive
+                                                  ? "text-[11px] text-emerald-400"
+                                                  : "text-[11px] text-red-400"
+                                        }
+                                    >
+                                        {change7d.label}
+                                    </span>
+                                </div>
 
-                            {/* 1 day */}
-                            <div className="flex items-center gap-1">
-                                {change1d.label !== "–" &&
-                                    (change1d.positive ? (
-                                        <ArrowUpRight className="size-3 text-emerald-400" />
-                                    ) : (
-                                        <ArrowDownRight className="size-3 text-red-400" />
-                                    ))}
-                                <span
-                                    className={
-                                        change1d.label === "–"
-                                            ? "text-[11px] text-muted-foreground"
-                                            : change1d.positive
-                                              ? "text-[11px] text-emerald-400"
-                                              : "text-[11px] text-red-400"
-                                    }
-                                >
-                                    {change1d.label}
-                                </span>
-                            </div>
+                                {/* TVL */}
+                                <div className="font-mono text-[11px]">
+                                    {formatNumber(t.tvlBch, 4)} BCH
+                                </div>
 
-                            {/* 7 days */}
-                            <div className="flex items-center gap-1">
-                                {change7d.label !== "–" &&
-                                    (change7d.positive ? (
-                                        <ArrowUpRight className="size-3 text-emerald-400" />
-                                    ) : (
-                                        <ArrowDownRight className="size-3 text-red-400" />
-                                    ))}
-                                <span
-                                    className={
-                                        change7d.label === "–"
-                                            ? "text-[11px] text-muted-foreground"
-                                            : change7d.positive
-                                              ? "text-[11px] text-emerald-400"
-                                              : "text-[11px] text-red-400"
-                                    }
-                                >
-                                    {change7d.label}
-                                </span>
-                            </div>
-
-                            {/* TVL */}
-                            <div className="font-mono text-[11px]">
-                                {formatNumber(t.tvlBch, 4)} BCH
-                            </div>
-
-                            {/* 30d Volume */}
-                            <div className="font-mono text-[11px]">
-                                {formatNumber(t.volume30dBch, 4)} BCH
-                            </div>
-                        </Link>
-                    );
-                })}
+                                {/* 30d Volume */}
+                                <div className="font-mono text-[11px]">
+                                    {formatNumber(t.volume30dBch, 4)} BCH
+                                </div>
+                            </Link>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -440,8 +453,9 @@ export default function TokensTable() {
                     onClick={() => {
                         // Increase the visible window first so when new data
                         // arrives it becomes immediately visible.
-                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, total));
-                        void loadPage(offset, debouncedSearch, false);
+                        setVisibleCount(prev =>
+                            Math.min(prev + PAGE_SIZE, filteredTokens.length),
+                        );
                     }}
                     disabled={loading}
                     className="mt-2 self-center inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
@@ -452,3 +466,4 @@ export default function TokensTable() {
         </div>
     );
 }
+
