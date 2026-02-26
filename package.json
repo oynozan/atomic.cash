@@ -17,6 +17,8 @@
         "@reown/appkit": "^1.8.18",
         "@reown/appkit-common": "^1.8.18",
         "@reown/appkit-universal-connector": "^1.8.18",
+        "@walletconnect/types": "^2.23.6",
+        "@walletconnect/universal-provider": "^2.23.6",
         "babel-plugin-react-compiler": "^1.0.0",
         "cashc": "^0.12.1",
         "cashscript": "^0.12.1",

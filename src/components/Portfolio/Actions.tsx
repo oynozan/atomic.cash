@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ArrowDownRight, Wallet, ChevronDown } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Wallet, ChevronDown, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { decodeCashAddress, encodeCashAddress } from "@bitauth/libauth";
 
 import { useWalletSession } from "@/components/Wrappers/Wallet";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
 import { usePortfolioBalanceHistoryStore } from "@/store/portfolioBalanceHistory";
-import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -18,24 +17,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import QRCode from "react-qr-code";
 
-type SendAsset =
-    | {
-          kind: "bch";
-          key: "bch";
-          symbol: string;
-          name: string;
-          balance: number;
-          iconUrl?: string | null;
-      }
-    | {
-          kind: "token";
-          key: string;
-          category: string;
-          symbol?: string;
-          name?: string | null;
-          balance: number;
-          iconUrl?: string | null;
-      };
+type BalancesResponse = import("@/store/portfolioBalances").PortfolioBalancesResponse;
+
+type PriceResponse = {
+    hasMarketPools?: boolean;
+    marketPrice?: number;
+};
 
 function formatNumber(n: number, maxDecimals = 6): string {
     if (!Number.isFinite(n)) return "-";
@@ -62,13 +49,12 @@ function TokenIcon({ iconUrl, symbol }: { iconUrl?: string | null; symbol: strin
 /* eslint-enable @next/next/no-img-element */
 
 export default function PortfolioActions() {
-    const { address, isConnected, session, provider } = useWalletSession();
+    const { address, isConnected, provider } = useWalletSession();
     const fetchBalances = usePortfolioBalancesStore(s => s.fetch);
     const byAddress = usePortfolioBalancesStore(s => s.byAddress);
     const loadingByAddress = usePortfolioBalancesStore(s => s.loading);
     const setPortfolioBchInStore = usePortfolioBalancesStore(s => s.setPortfolioBch);
     const invalidateBalances = usePortfolioBalancesStore(s => s.invalidate);
-    const fetchBalanceHistory = usePortfolioBalanceHistoryStore(s => s.fetch);
     const invalidateBalanceHistory = usePortfolioBalanceHistoryStore(s => s.invalidate);
 
     const balances = address ? (byAddress[address]?.data ?? null) : null;
@@ -77,7 +63,8 @@ export default function PortfolioActions() {
 
     const [sendOpen, setSendOpen] = useState(false);
     const [receiveOpen, setReceiveOpen] = useState(false);
-    const [selectedAssetKey, setSelectedAssetKey] = useState<string>("bch");
+    const [sendAssetType, setSendAssetType] = useState<"bch" | "token">("bch");
+    const [selectedTokenCategory, setSelectedTokenCategory] = useState<string | null>(null);
     const [sendTo, setSendTo] = useState("");
     const [sendAmount, setSendAmount] = useState("");
     const [sending, setSending] = useState(false);
@@ -112,45 +99,34 @@ export default function PortfolioActions() {
 
         const compute = async () => {
             let total = balances.bch;
-
             const uniqueCategories = Array.from(
                 new Set(balances.tokens.filter(t => t.amount > 0).map(t => t.category)),
             );
 
-            if (uniqueCategories.length === 0) {
-                if (!cancelled) {
-                    setPortfolioBch(total);
-                    setPortfolioBchInStore(address, total);
-                }
-                return;
-            }
+            const priceEntries: Record<string, number> = {};
 
-            type BulkPricesResponse = {
-                prices: Record<
-                    string,
-                    {
-                        marketPrice: number | null;
-                        hasMarketPools: boolean;
+            await Promise.all(
+                uniqueCategories.map(async cat => {
+                    try {
+                        const res = await fetch(
+                            `/api/pools/price?tokenCategory=${encodeURIComponent(cat)}`,
+                        );
+                        if (!res.ok) return;
+                        const json: PriceResponse = await res.json();
+                        if (json.hasMarketPools && typeof json.marketPrice === "number") {
+                            priceEntries[cat] = json.marketPrice;
+                        }
+                    } catch {
+                        // ignore individual failures
                     }
-                >;
-            };
+                }),
+            );
 
-            try {
-                const params = new URLSearchParams();
-                for (const cat of uniqueCategories) {
-                    params.append("tokenCategory", cat);
+            for (const t of balances.tokens) {
+                const price = priceEntries[t.category];
+                if (price && t.amount > 0) {
+                    total += t.amount * price;
                 }
-                const url = `/api/pools/prices?${params.toString()}`;
-                const data = await fetchJsonOnce<BulkPricesResponse>(url);
-                for (const t of balances.tokens) {
-                    const info = data.prices[t.category];
-                    const price = info?.marketPrice ?? null;
-                    if (price && t.amount > 0) {
-                        total += t.amount * price;
-                    }
-                }
-            } catch {
-                // ignore price fetch failures; fallback to BCH-only total
             }
 
             if (!cancelled) {
@@ -171,39 +147,13 @@ export default function PortfolioActions() {
         [balances],
     );
 
-    const sendAssets: SendAsset[] = useMemo(() => {
-        if (!balances) return [];
-        const assets: SendAsset[] = [
-            {
-                kind: "bch",
-                key: "bch",
-                symbol: "BCH",
-                name: "Bitcoin Cash",
-                balance: balances.bch,
-            },
-        ];
-        for (const t of selectableTokens) {
-            assets.push({
-                kind: "token",
-                key: t.category,
-                category: t.category,
-                symbol: t.symbol,
-                name: t.name,
-                balance: t.amount,
-                iconUrl: t.iconUrl,
-            });
-        }
-        return assets;
-    }, [balances, selectableTokens]);
-
-    const selectedAsset = useMemo<SendAsset | null>(() => {
-        if (!sendAssets.length) return null;
-        const found =
-            sendAssets.find(a =>
-                a.kind === "bch" ? selectedAssetKey === "bch" : a.key === selectedAssetKey,
-            ) ?? sendAssets[0];
-        return found ?? null;
-    }, [sendAssets, selectedAssetKey]);
+    const selectedToken = useMemo(
+        () =>
+            selectedTokenCategory
+                ? (selectableTokens.find(t => t.category === selectedTokenCategory) ?? null)
+                : (selectableTokens[0] ?? null),
+        [selectableTokens, selectedTokenCategory],
+    );
 
     const tokenReceiveAddress = useMemo(() => {
         if (!address) return null;
@@ -228,7 +178,7 @@ export default function PortfolioActions() {
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!isConnected || !address || !session) {
+        if (!isConnected || !address || !provider) {
             toast.error("Connect your wallet first.");
             return;
         }
@@ -239,32 +189,18 @@ export default function PortfolioActions() {
             return;
         }
 
-        if (!selectedAsset) {
-            toast.error("Select an asset to send.");
-            return;
-        }
-
-        if (selectedAsset.kind === "bch") {
-            if (!balances || value > balances.bch) {
-                toast.error("You don't have enough BCH balance.");
+        if (sendAssetType === "token") {
+            if (!selectedToken) {
+                toast.error("Select a token to send.");
                 return;
             }
-        } else {
-            if (value > selectedAsset.balance) {
+            if (value > selectedToken.amount) {
                 toast.error("You don't have enough balance for this token.");
                 return;
             }
-            if (!selectedAsset.category) {
-                toast.error("Invalid token selection.");
-                return;
-            }
         }
 
-        const tokenCategory =
-            selectedAsset.kind === "token" && selectedAsset.category
-                ? selectedAsset.category
-                : undefined;
-        if (selectedAsset.kind === "token" && !tokenCategory) {
+        if (sendAssetType === "token" && !selectedToken?.category) {
             toast.error("Invalid token selection.");
             return;
         }
@@ -278,7 +214,10 @@ export default function PortfolioActions() {
                     fromAddress: address,
                     toAddress: trimmedTo,
                     amount: value,
-                    tokenCategory,
+                    tokenCategory:
+                        sendAssetType === "token" && selectedToken
+                            ? selectedToken.category
+                            : undefined,
                 }),
             });
             const data = await res.json();
@@ -309,14 +248,11 @@ export default function PortfolioActions() {
                     ? `Send submitted successfully. TxID: ${broadcastData.txid}`
                     : "Send submitted successfully.",
             );
-            // Ensure fresh portfolio data after a successful send.
-            // Invalidate first to drop any stale cache, then force-refetch.
             invalidateBalances(address);
             invalidateBalanceHistory(address);
-            void fetchBalances(address, true);
-            void fetchBalanceHistory(address, true);
             setSendOpen(false);
-            setSelectedAssetKey("bch");
+            setSendAssetType("bch");
+            setSelectedTokenCategory(null);
             setSendAmount("");
             setSendTo("");
         } catch (err) {
@@ -344,7 +280,7 @@ export default function PortfolioActions() {
                                 Quick actions
                             </div>
                             <div className="text-xs text-muted-foreground">
-                                Send or receive BCH or tokens.
+                                Send or receive BCH.
                             </div>
                         </div>
                     </div>
@@ -410,111 +346,128 @@ export default function PortfolioActions() {
                             </button>
                         </div>
                         <form onSubmit={handleSend} className="space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-medium text-muted-foreground">
-                                    Asset
-                                </label>
-                                {loadingBalances && !sendAssets.length ? (
-                                    <div className="flex h-10 items-center rounded-xl border bg-background/40 px-3 text-[11px] text-muted-foreground">
-                                        Loading your balances…
-                                    </div>
-                                ) : (
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="w-full justify-between h-10 rounded-xl px-3 text-xs font-normal"
-                                            >
-                                                <span className="flex items-center gap-2 truncate">
-                                                    {selectedAsset ? (
-                                                        <>
-                                                            {selectedAsset.kind === "bch" ? (
-                                                                <TokenIcon
-                                                                    iconUrl="/icons/bch.svg"
-                                                                    symbol="BCH"
-                                                                />
+                            <div className="flex flex-col gap-3">
+                                <div className="inline-flex self-start rounded-full bg-background/60 p-1 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSendAssetType("bch")}
+                                        className={`px-3 py-1.5 rounded-full font-semibold transition-colors ${
+                                            sendAssetType === "bch"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "text-muted-foreground"
+                                        }`}
+                                    >
+                                        BCH
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSendAssetType("token");
+                                            if (!selectedToken && selectableTokens[0]) {
+                                                setSelectedTokenCategory(
+                                                    selectableTokens[0].category,
+                                                );
+                                            }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-full font-semibold transition-colors ${
+                                            sendAssetType === "token"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "text-muted-foreground"
+                                        }`}
+                                    >
+                                        Token
+                                    </button>
+                                </div>
+                                {sendAssetType === "token" && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-muted-foreground">
+                                            Select token
+                                        </label>
+                                        {loadingBalances ? (
+                                            <div className="flex h-10 items-center rounded-xl border bg-background/40 px-3 text-[11px] text-muted-foreground">
+                                                Loading your tokens…
+                                            </div>
+                                        ) : selectableTokens.length === 0 ? (
+                                            <div className="flex h-10 items-center rounded-xl border border-dashed bg-background/40 px-3 text-[11px] text-muted-foreground">
+                                                No tokens with balance.
+                                            </div>
+                                        ) : (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className="w-full justify-between h-10 rounded-xl px-3 text-xs font-normal"
+                                                    >
+                                                        <span className="flex items-center gap-2 truncate">
+                                                            {selectedToken ? (
+                                                                <>
+                                                                    <TokenIcon
+                                                                        iconUrl={
+                                                                            selectedToken.iconUrl
+                                                                        }
+                                                                        symbol={
+                                                                            selectedToken.symbol ??
+                                                                            selectedToken.category.slice(
+                                                                                0,
+                                                                                8,
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                    <span className="truncate">
+                                                                        {selectedToken.symbol ??
+                                                                            selectedToken.category.slice(
+                                                                                0,
+                                                                                8,
+                                                                            )}
+                                                                        {selectedToken.name
+                                                                            ? ` · ${selectedToken.name}`
+                                                                            : ""}
+                                                                    </span>
+                                                                </>
                                                             ) : (
-                                                                <TokenIcon
-                                                                    iconUrl={selectedAsset.iconUrl}
-                                                                    symbol={
-                                                                        selectedAsset.symbol ??
-                                                                        selectedAsset.category.slice(
-                                                                            0,
-                                                                            8,
-                                                                        )
-                                                                    }
-                                                                />
+                                                                "Select token"
                                                             )}
-                                                            <span className="truncate">
-                                                                {selectedAsset.kind === "bch"
-                                                                    ? "BCH · Bitcoin Cash"
-                                                                    : `${selectedAsset.symbol ?? selectedAsset.category.slice(0, 8)}${
-                                                                          selectedAsset.name
-                                                                              ? ` · ${selectedAsset.name}`
-                                                                              : ""
-                                                                      }`}
-                                                            </span>
-                                                        </>
-                                                    ) : (
-                                                        "Select asset"
-                                                    )}
-                                                </span>
-                                                <ChevronDown className="size-3 shrink-0 opacity-60" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                            align="start"
-                                            className="w-(--radix-dropdown-menu-trigger-width) max-h-64 overflow-y-auto"
-                                        >
-                                            {sendAssets.map(asset => (
-                                                <DropdownMenuItem
-                                                    key={asset.key}
-                                                    onSelect={() => setSelectedAssetKey(asset.key)}
-                                                    className="flex items-center gap-2 text-xs"
+                                                        </span>
+                                                        <ChevronDown className="size-3 shrink-0 opacity-60" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent
+                                                    align="start"
+                                                    className="w-(--radix-dropdown-menu-trigger-width) max-h-64 overflow-y-auto"
                                                 >
-                                                    {asset.kind === "bch" ? (
-                                                        <TokenIcon
-                                                            iconUrl="/icons/bch.svg"
-                                                            symbol="BCH"
-                                                        />
-                                                    ) : (
-                                                        <TokenIcon
-                                                            iconUrl={asset.iconUrl}
-                                                            symbol={
-                                                                asset.symbol ??
-                                                                asset.category.slice(0, 8)
+                                                    {selectableTokens.map(t => (
+                                                        <DropdownMenuItem
+                                                            key={t.category}
+                                                            onSelect={() =>
+                                                                setSelectedTokenCategory(t.category)
                                                             }
-                                                        />
-                                                    )}
-                                                    <span className="truncate">
-                                                        {asset.kind === "bch"
-                                                            ? "BCH · Bitcoin Cash"
-                                                            : `${asset.symbol ?? asset.category.slice(0, 8)}${
-                                                                  asset.name
-                                                                      ? ` · ${asset.name}`
-                                                                      : ""
-                                                              }`}
-                                                    </span>
-                                                    <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                                                        {formatNumber(asset.balance, 6)}
-                                                    </span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                                            className="flex items-center gap-2 text-xs"
+                                                        >
+                                                            <TokenIcon
+                                                                iconUrl={t.iconUrl}
+                                                                symbol={
+                                                                    t.symbol ??
+                                                                    t.category.slice(0, 8)
+                                                                }
+                                                            />
+                                                            <span className="truncate">
+                                                                {t.symbol ?? t.category.slice(0, 8)}
+                                                                {t.name ? ` · ${t.name}` : ""}
+                                                            </span>
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-medium text-muted-foreground">
-                                    {selectedAsset?.kind === "bch"
+                                    {sendAssetType === "bch"
                                         ? "Amount (BCH)"
-                                        : `Amount (${
-                                              selectedAsset?.symbol ||
-                                              selectedAsset?.name ||
-                                              (selectedAsset && "token") ||
-                                              ""
-                                          })`}
+                                        : `Amount (${selectedToken?.symbol || selectedToken?.name || "token"})`}
                                 </label>
                                 <input
                                     type="number"
@@ -550,17 +503,17 @@ export default function PortfolioActions() {
                 </div>
             )}
 
-            {/* Receive modal — scrollable so content is not hidden behind dock */}
+            {/* Receive modal */}
             {receiveOpen && address && (
                 <div
-                    className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-black/60 px-4 pt-4 pb-24 sm:pb-4 overflow-y-auto"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
                     onClick={() => setReceiveOpen(false)}
                 >
                     <div
-                        className="w-full max-w-2xl max-h-[min(calc(100vh-6rem),85vh)] rounded-2xl border bg-popover p-5 shadow-xl flex flex-col gap-4 overflow-y-auto"
+                        className="w-full max-w-3xl rounded-2xl border bg-popover p-5 shadow-xl flex flex-col gap-4"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="mb-1 flex items-center justify-between w-full shrink-0">
+                        <div className="mb-1 flex items-center justify-between w-full">
                             <h2 className="text-lg font-semibold">Receive crypto</h2>
                             <button
                                 type="button"
@@ -570,10 +523,10 @@ export default function PortfolioActions() {
                                 ✕
                             </button>
                         </div>
-                        <div className="text-xs text-muted-foreground text-center shrink-0">
+                        <div className="text-xs text-muted-foreground text-center">
                             Scan the code to receive BCH or CashTokens.
                         </div>
-                        <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center gap-6 mt-1 pb-2 min-h-0">
+                        <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center gap-6 mt-1">
                             <div className="flex-1 flex flex-col items-center gap-3">
                                 <div className="rounded-[24px] bg-background/80 p-4 shadow-inner">
                                     <div className="bg-popover rounded-2xl p-3 border border-border/60">
@@ -590,15 +543,14 @@ export default function PortfolioActions() {
                                     <div className="text-xs text-muted-foreground text-center">
                                         BCH address
                                     </div>
-                                    <div className="flex items-center justify-between gap-2 rounded-full border bg-background/60 px-3 py-1.5 mx-auto">
-                                        <span className="text-[11px] font-mono truncate">
+                                    <div className="flex items-center justify-between gap-2 rounded-full border bg-background/60 pl-4 pr-1 py-1 mx-auto">
+                                        <p className="text-xs font-mono truncate">
                                             {address}
-                                        </span>
+                                        </p>
                                         <Button
                                             type="button"
-                                            size="sm"
+                                            size="icon"
                                             variant="outline"
-                                            className="h-7 px-3 text-[11px]"
                                             onClick={() => {
                                                 navigator.clipboard
                                                     .writeText(address)
@@ -608,7 +560,7 @@ export default function PortfolioActions() {
                                                     );
                                             }}
                                         >
-                                            Copy
+                                            <Copy size={12} />
                                         </Button>
                                     </div>
                                 </div>
@@ -630,15 +582,14 @@ export default function PortfolioActions() {
                                         <div className="text-xs text-muted-foreground text-center">
                                             Token (CashTokens) address
                                         </div>
-                                        <div className="flex items-center justify-between gap-2 rounded-full border bg-background/60 px-3 py-1.5 mx-auto">
-                                            <span className="text-[11px] font-mono truncate">
+                                        <div className="flex items-center justify-between gap-2 rounded-full border bg-background/60 pl-4 pr-1 py-1 mx-auto">
+                                            <p className="text-xs font-mono truncate">
                                                 {tokenReceiveAddress}
-                                            </span>
+                                            </p>
                                             <Button
                                                 type="button"
-                                                size="sm"
+                                                size="icon"
                                                 variant="outline"
-                                                className="h-7 px-3 text-[11px]"
                                                 onClick={() => {
                                                     navigator.clipboard
                                                         .writeText(tokenReceiveAddress)
@@ -648,7 +599,7 @@ export default function PortfolioActions() {
                                                         );
                                                 }}
                                             >
-                                                Copy
+                                                <Copy size={12} />
                                             </Button>
                                         </div>
                                     </div>

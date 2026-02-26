@@ -72,50 +72,56 @@ export default function Header() {
                 <div className="hidden lg:flex gap-5 text-white/60 flex-1 justify-center min-w-0">
                     {navLinks}
                 </div>
-                {/* Mobile menu: visible below lg */}
-                <div className="flex lg:hidden items-center gap-2 shrink-0">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-white/80 hover:text-white hover:bg-white/10 rounded-full"
-                                aria-label="Open menu"
-                            >
-                                <Menu size={24} />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem asChild>
-                                <Link href="/">Swap</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/pools">Pools</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/tokens">Tokens</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/trades">Trades</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/portfolio">Portfolio</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/aUSD" className="text-gold">
-                                    aUSD
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <a href="https://docs.atomic.cash" target="_blank" rel="noreferrer">
-                                    Docs <ExternalLink size={14} className="inline ml-1" />
-                                </a>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-                <div className="shrink min-w-0 max-w-[50vw] sm:max-w-none overflow-hidden">
-                    <ConnectWallet className="py-3 px-4 sm:py-4.5 sm:px-6! text-sm sm:text-base w-full min-w-0 truncate" />
+                <div className="max-[500px]:flex-1 flex items-center justify-end gap-2 min-w-0">
+                    <div className="shrink min-w-0 max-w-[50vw] sm:max-w-none overflow-hidden">
+                        <ConnectWallet className="py-3 px-4 sm:py-4.5 sm:px-6! text-sm sm:text-base w-full min-w-0 truncate" />
+                    </div>
+                    {/* Mobile menu: visible below lg */}
+                    <div className="flex lg:hidden items-center gap-2 shrink-0">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-white/80 hover:text-white hover:bg-white/10 rounded-full"
+                                    aria-label="Open menu"
+                                >
+                                    <Menu size={24} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem asChild>
+                                    <Link href="/">Swap</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/pools">Pools</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/tokens">Tokens</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/trades">Trades</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/portfolio">Portfolio</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/aUSD" className="text-gold">
+                                        aUSD
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <a
+                                        href="https://docs.atomic.cash"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Docs <ExternalLink size={14} className="inline ml-1" />
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             </div>
         </header>

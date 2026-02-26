@@ -1,8 +1,8 @@
 "use client";
 
 import { createAppKit } from "@reown/appkit/core";
-import UniversalProvider from "@walletconnect/universal-provider";
 import type { SessionTypes } from "@walletconnect/types";
+import UniversalProvider from "@walletconnect/universal-provider";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 const rawProjectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
@@ -44,9 +44,7 @@ export const bchChipnet = {
     },
 };
 
-/** Active network: chipnet if NEXT_PUBLIC_NETWORK=chipnet, otherwise mainnet */
 export const activeBchNetwork = isChipnet ? bchChipnet : bchMainnet;
-/** WalletConnect/CAIP-2 chain ID (bch:bitcoincash or bch:bchtest) */
 export const BCH_CHAIN_ID = activeBchNetwork.caipNetworkId;
 
 export const wcMetadata = {
@@ -121,7 +119,6 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             const existingNamespaces = provider.session?.namespaces ?? {};
             const hasBch = Object.prototype.hasOwnProperty.call(existingNamespaces, BCH_NAMESPACE);
             if (provider.session && !hasBch) {
-                // If there's an old incompatible session, just drop it from the provider.
                 await provider.disconnect();
             }
 
@@ -165,13 +162,10 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
         }
 
         try {
-            // Only call disconnect if there is an active WC2 session
             if (provider.session) {
                 await provider.disconnect();
             }
         } catch (err) {
-            // In some cases UniversalProvider may throw "Please call connect() before enable()";
-            // we swallow it here because we will clear the address on the UI side anyway.
             console.error("[wallet] provider.disconnect failed", err);
         } finally {
             setAddress(null);
@@ -204,7 +198,6 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
             const p = await UniversalProvider.init({
                 projectId,
                 metadata: wcMetadata,
-                // Suppress WalletConnect relay message errors (e.g. onRelayMessage) that spam the console
                 logger: "silent",
             });
 
@@ -213,9 +206,9 @@ export default function WalletWrapper({ children }: { children: React.ReactNode 
                 networks: [
                     activeBchNetwork as Parameters<typeof createAppKit>[0]["networks"][number],
                 ],
-                universalProvider: p,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- version mismatch between @reown/appkit's bundled @walletconnect/universal-provider and the project's direct dependency
+                universalProvider: p as any,
                 manualWCControl: true,
-                // Sadece WalletConnect QR kodu, altta wallet arama/listesi yok
                 allWallets: "HIDE",
                 enableWalletGuide: false,
                 features: {

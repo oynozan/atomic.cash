@@ -1,4 +1,5 @@
 import SwapPanel from "@/components/Swap/Panel";
+import { Suspense } from "react";
 
 export default function Swap() {
     return (
@@ -7,7 +8,9 @@ export default function Swap() {
                 <h1 className="text-4xl sm:text-5xl md:text-5xl lg:text-6xl xl:text-7xl font-figtree font-semibold text-center leading-tight">
                     Swap <span className="text-primary block sm:inline">CashTokens</span> instantly
                 </h1>
-                <SwapPanel />
+                <Suspense>
+                    <SwapPanel />
+                </Suspense>
             </div>
         </section>
     );

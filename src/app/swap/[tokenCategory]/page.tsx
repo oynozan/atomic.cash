@@ -7,7 +7,7 @@ import TokenDetailHeader from "@/components/TokenDetail/Header";
 import TokenDetailPriceChart from "@/components/TokenDetail/PriceChart";
 import TokenDetailTradeHistory from "@/components/TokenDetail/TradeHistory";
 import TokenDetailInfo from "@/components/TokenDetail/Info";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { fetchJsonOnce } from "@/lib/fetchJsonOnce";
 import { useTokensOverviewStore } from "@/store/tokensOverview";
 import { useTokenPriceStore } from "@/store/tokenPrice";
@@ -169,17 +169,19 @@ export default function SwapTokenPage() {
                     {/* Swap: below lg use justify-center to center panel; desktop right col */}
                     <div className="order-1 min-w-0 w-full flex justify-center lg:col-start-2 lg:row-start-1">
                         <div className="rounded-[24px] border bg-popover p-4 sm:p-5 w-full">
-                            <SwapPanel
-                                className="w-full mx-auto"
-                                onSwapCompleted={() => {
-                                    setReloadKey(key => key + 1);
-                                    useTokenPriceStore
-                                        .getState()
-                                        .invalidate(tokenCategory ?? undefined);
-                                    useTokensOverviewStore.getState().invalidate();
-                                    void useTokensOverviewStore.getState().fetch(true);
-                                }}
-                            />
+                            <Suspense>
+                                <SwapPanel
+                                    className="w-full mx-auto"
+                                    onSwapCompleted={() => {
+                                        setReloadKey(key => key + 1);
+                                        useTokenPriceStore
+                                            .getState()
+                                            .invalidate(tokenCategory ?? undefined);
+                                        useTokensOverviewStore.getState().invalidate();
+                                        void useTokensOverviewStore.getState().fetch(true);
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     </div>
 
