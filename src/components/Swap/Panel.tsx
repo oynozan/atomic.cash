@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Github } from "lucide-react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 
@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import { formatBchPrice, roundBch } from "@/lib/utils";
 import { useTokenPriceStore } from "@/store/tokenPrice";
 import { usePortfolioBalancesStore } from "@/store/portfolioBalances";
-import { useTokensOverviewStore } from "@/store/tokensOverview";
 import { getAddressExplorerUrl } from "@/dapp/explorer";
 import { cn } from "@/lib/utils";
 
@@ -72,33 +71,105 @@ function TokenAvatar({ symbol, iconUrl }: { symbol: string; iconUrl?: string }) 
 
 function TokenSelectModal({
     tokens,
+    tokensLoading,
+    ensureBalances,
     onClose,
     onSelect,
 }: {
     tokens: TokenOption[];
+    tokensLoading: boolean;
+    ensureBalances?: () => void;
     onClose: () => void;
     onSelect: (t: TokenOption) => void;
 }) {
     const [search, setSearch] = useState("");
 
+    // Remote search results from backend when there is a search query.
+    const [remoteTokens, setRemoteTokens] = useState<TokenOption[] | null>(null);
+    const [searchLoading, setSearchLoading] = useState(false);
+
+    // Base list: all tokens sorted by total BCH liquidity (most popular first),
+    // then by user balance.
+    const sortedByPopularity = useMemo(
+        () =>
+            [...tokens].sort((a, b) => {
+                const liqDiff = (b.totalBchLiquidity ?? 0) - (a.totalBchLiquidity ?? 0);
+                if (liqDiff !== 0) return liqDiff;
+                return (b.balance ?? 0) - (a.balance ?? 0);
+            }),
+        [tokens],
+    );
+
+    // Debounced backend search over the full token list.
+    useEffect(() => {
+        const q = search.trim();
+        if (!q) {
+            setRemoteTokens(null);
+            setSearchLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setSearchLoading(true);
+        const handle = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/tokens/overview?q=${encodeURIComponent(q)}`);
+                if (!res.ok) throw new Error("Failed to search tokens");
+                const json = (await res.json()) as {
+                    tokens: {
+                        tokenCategory: string;
+                        symbol?: string;
+                        name?: string;
+                        iconUrl?: string;
+                        priceBch: number | null;
+                        tvlBch: number;
+                    }[];
+                };
+                if (cancelled) return;
+
+                const mapped: TokenOption[] = json.tokens.map(t => {
+                    const existing = tokens.find(x => x.category === t.tokenCategory);
+                    return {
+                        category: t.tokenCategory,
+                        symbol: t.symbol ?? existing?.symbol,
+                        name: t.name ?? existing?.name,
+                        iconUrl: t.iconUrl ?? existing?.iconUrl,
+                        priceBch: t.priceBch ?? existing?.priceBch,
+                        totalBchLiquidity: t.tvlBch,
+                        balance: existing?.balance,
+                    };
+                });
+
+                setRemoteTokens(mapped);
+                // After a successful search, re-trigger balances so newly
+                // surfaced tokens also get up-to-date balances.
+                ensureBalances?.();
+            } catch {
+                if (!cancelled) {
+                    setRemoteTokens([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setSearchLoading(false);
+                }
+            }
+        }, 300);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(handle);
+        };
+    }, [search, tokens]);
+
     const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
+        // No search: show only the top 20 most popular tokens.
+        if (!search.trim()) {
+            return sortedByPopularity.slice(0, 20);
+        }
 
-        // Sort by user balance first (descending)
-        const sorted = [...tokens].sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
-
-        if (!q) return sorted;
-
-        return sorted.filter(t => {
-            const symbol = t.symbol ?? t.category.slice(0, 8);
-            const name = t.name ?? "";
-            return (
-                symbol.toLowerCase().includes(q) ||
-                name.toLowerCase().includes(q) ||
-                t.category.toLowerCase().includes(q)
-            );
-        });
-    }, [tokens, search]);
+        // With a search query: show backend search results (already filtered).
+        return remoteTokens ?? [];
+    }, [search, sortedByPopularity, remoteTokens]);
 
     return (
         <div
@@ -131,11 +202,28 @@ function TokenSelectModal({
                 </div>
 
                 <div className="max-h-80 overflow-y-auto space-y-1">
-                    {filtered.length === 0 && (
+                    {/* Loading states */}
+                    {!search.trim() && tokensLoading && (
                         <div className="py-6 text-center text-sm text-muted-foreground">
-                            No tokens with liquidity.
+                            Loading tokens…
                         </div>
                     )}
+                    {search.trim() && searchLoading && (
+                        <div className="py-6 text-center text-sm text-muted-foreground">
+                            Searching tokens…
+                        </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!tokensLoading &&
+                        !searchLoading &&
+                        filtered.length === 0 && (
+                            <div className="py-6 text-center text-sm text-muted-foreground">
+                                No tokens with liquidity.
+                            </div>
+                        )}
+
+                    {/* Results */}
                     {filtered.map(t => {
                         const primary = t.name ?? t.symbol ?? `${t.category.slice(0, 8)}…`;
                         const secondary =
@@ -189,16 +277,65 @@ export default function SwapPanel(props: SwapPanelProps) {
     const [swapType, setSwapType] = useState<"exact_input" | "exact_output">("exact_input");
     const [slippage, setSlippage] = useState<number>(0.5);
 
-    const {
-        data: overviewData,
-        error: tokensError,
-        fetch: fetchTokensOverview,
-    } = useTokensOverviewStore();
+    // Top tokens for the swap panel (same source as Tokens page, but limited).
+    const [overviewTokens, setOverviewTokens] = useState<
+        {
+            tokenCategory: string;
+            symbol?: string;
+            name?: string;
+            iconUrl?: string;
+            priceBch: number | null;
+            tvlBch: number;
+        }[]
+    >([]);
+    const [tokensError, setTokensError] = useState<string | null>(null);
+    const [tokensLoading, setTokensLoading] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const run = async () => {
+            setTokensError(null);
+            setTokensLoading(true);
+            try {
+                // Fetch full tokens overview once; the modal will only show
+                // the top N by default, but we keep the complete list here
+                // so search, balances and pool detection always work correctly.
+                const res = await fetch("/api/tokens/overview");
+                if (!res.ok) throw new Error("Failed to load tokens overview");
+                const json = (await res.json()) as {
+                    tokens: {
+                        tokenCategory: string;
+                        symbol?: string;
+                        name?: string;
+                        iconUrl?: string;
+                        priceBch: number | null;
+                        tvlBch: number;
+                    }[];
+                };
+                if (!cancelled) {
+                    setOverviewTokens(json.tokens);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setTokensError(
+                        err instanceof Error ? err.message : "Failed to load tokens overview",
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setTokensLoading(false);
+                }
+            }
+        };
+        void run();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const tokens = useMemo(() => {
-        const items = overviewData?.tokens;
-        if (!items?.length) return [];
-        return items
+        if (!overviewTokens.length) return [];
+        return overviewTokens
             .map<TokenOption>(t => ({
                 category: t.tokenCategory,
                 symbol: t.symbol,
@@ -208,7 +345,7 @@ export default function SwapPanel(props: SwapPanelProps) {
                 totalBchLiquidity: t.tvlBch,
             }))
             .sort((a, b) => (b.totalBchLiquidity ?? 0) - (a.totalBchLiquidity ?? 0));
-    }, [overviewData?.tokens]);
+    }, [overviewTokens]);
 
     const [selectedToken, setSelectedToken] = useState<TokenOption | null>(null);
     const [showTokenModal, setShowTokenModal] = useState(false);
@@ -247,10 +384,6 @@ export default function SwapPanel(props: SwapPanelProps) {
     const [lastEdited, setLastEdited] = useState<"input" | "output">("input");
     const quoteAbortRef = useRef<AbortController | null>(null);
 
-    useEffect(() => {
-        fetchTokensOverview();
-    }, [fetchTokensOverview]);
-
     // Preselect token from URL when pools data is ready
     useEffect(() => {
         if (!tokens.length) return;
@@ -267,10 +400,15 @@ export default function SwapPanel(props: SwapPanelProps) {
     }, [tokens, pathname, searchParams]);
 
     // Load user balances for percentage buttons (reuses portfolioBalances store with TTL)
-    useEffect(() => {
+    const ensureBalances = useCallback(() => {
         if (!isConnected || !address) return;
         void fetchPortfolioBalances(address);
     }, [isConnected, address, fetchPortfolioBalances]);
+
+    // Load user balances for percentage buttons (reuses portfolioBalances store with TTL)
+    useEffect(() => {
+        ensureBalances();
+    }, [ensureBalances]);
 
     const activeAmount = useMemo(
         () => (lastEdited === "input" ? inputAmount : outputAmount),
@@ -1136,9 +1274,11 @@ export default function SwapPanel(props: SwapPanelProps) {
                 .
             </p>
 
-            {showTokenModal && tokensWithBalance.length > 0 && (
+            {showTokenModal && (
                 <TokenSelectModal
                     tokens={tokensWithBalance}
+                    tokensLoading={tokensLoading}
+                    ensureBalances={ensureBalances}
                     onClose={() => setShowTokenModal(false)}
                     onSelect={t => {
                         setSelectedToken(t);

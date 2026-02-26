@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getTransactionsCollection, type StoredTransaction } from "@/lib/mongodb";
 import { getAllPools } from "@/dapp/queries/registry";
@@ -88,8 +88,19 @@ function baselinePriceSince(
     return after?.priceBch ?? null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const searchParams = request.nextUrl.searchParams;
+        const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+
+        const limitParam = searchParams.get("limit");
+        const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : NaN;
+        const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
+
+        const offsetParam = searchParams.get("offset");
+        const parsedOffset = offsetParam ? Number.parseInt(offsetParam, 10) : NaN;
+        const offset = Number.isFinite(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
+
         const [{ pools }, txColl] = await Promise.all([getAllPools(), getTransactionsCollection()]);
 
         const now = Date.now();
@@ -202,7 +213,7 @@ export async function GET() {
         const last24Start = now - dayMs;
         const last7Start = now - 7 * dayMs;
 
-        const tokens: TokenOverview[] = Array.from(tokensMap.entries())
+        let tokens: TokenOverview[] = Array.from(tokensMap.entries())
             .map(([category, data]) => {
                 const priceBch =
                     data.priceDen > 0 && Number.isFinite(data.priceNum / data.priceDen)
@@ -261,9 +272,29 @@ export async function GET() {
             })
             .sort((a, b) => b.tvlBch - a.tvlBch);
 
+        // Optional backend-side search: filter by symbol/name/category.
+        if (q) {
+            tokens = tokens.filter(t => {
+                const symbol = t.symbol ?? "";
+                const name = t.name ?? "";
+                const category = t.tokenCategory;
+                const haystack = `${symbol} ${name} ${category}`.toLowerCase();
+                return haystack.includes(q);
+            });
+        }
+
+        const total = tokens.length;
+
+        // Optional pagination (e.g. for "top N" tokens or offset pages).
+        if (limit != null) {
+            tokens = tokens.slice(offset, offset + limit);
+        } else if (offset > 0) {
+            tokens = tokens.slice(offset);
+        }
+
         const body: TokensOverviewResponse = {
             tokens,
-            total: tokens.length,
+            total,
         };
 
         return NextResponse.json(body);

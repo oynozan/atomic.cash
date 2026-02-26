@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { formatBchPrice } from "@/lib/utils";
-import { useTokensOverviewStore } from "@/store/tokensOverview";
+import type { TokenOverview } from "@/store/tokensOverview";
+
+type TokensOverviewResponse = {
+    tokens: TokenOverview[];
+    total: number;
+};
 
 function formatNumber(n: number | null, maxDecimals = 6): string {
     if (n == null || !Number.isFinite(n)) return "-";
@@ -32,37 +37,75 @@ function formatPercent(n: number | null): { label: string; positive: boolean } {
 }
 
 export default function TokensTable() {
-    const { data, loading, error, fetch: fetchTokens } = useTokensOverviewStore();
     const [search, setSearch] = useState("");
     const [sortMode, setSortMode] = useState<
         "tvl" | "priceAsc" | "priceDesc" | "gainers" | "losers" | "volume"
     >("tvl");
 
-    useEffect(() => {
-        fetchTokens();
-    }, [fetchTokens]);
+    // Local paginated token state (backend-driven).
+    const [tokens, setTokens] = useState<TokenOverview[]>([]);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [offset, setOffset] = useState(0);
 
-    const tokens = data?.tokens ?? [];
+    // Debounced search value used for backend queries.
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+
+    useEffect(() => {
+        const handle = setTimeout(() => {
+            setDebouncedSearch(search.trim());
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [search]);
+
+    const PAGE_SIZE = 20;
+
+    const loadPage = useCallback(
+        async (startOffset: number, q: string, replace: boolean) => {
+            setLoading(true);
+            setError(null);
+            try {
+                const params = new URLSearchParams();
+                params.set("limit", String(PAGE_SIZE));
+                if (startOffset > 0) params.set("offset", String(startOffset));
+                if (q) params.set("q", q);
+
+                const res = await fetch(`/api/tokens/overview?${params.toString()}`);
+                if (!res.ok) {
+                    throw new Error("Failed to load tokens");
+                }
+                const json = (await res.json()) as TokensOverviewResponse;
+
+                setTotal(json.total);
+                setOffset(startOffset + json.tokens.length);
+
+                setTokens(prev => {
+                    if (replace) return json.tokens;
+                    const existing = new Set(prev.map(t => t.tokenCategory));
+                    const appended = json.tokens.filter(t => !existing.has(t.tokenCategory));
+                    return [...prev, ...appended];
+                });
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to load tokens");
+            } finally {
+                setLoading(false);
+            }
+        },
+        [],
+    );
+
+    // Initial load and when debounced search changes.
+    useEffect(() => {
+        // Reset offset for the new query but keep current tokens visible
+        // until the new results arrive, so the header/search UI does not "shrink".
+        setOffset(0);
+        void loadPage(0, debouncedSearch, true);
+    }, [debouncedSearch, loadPage]);
 
     const filteredTokens = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        let list = tokens;
-
-        if (q) {
-            list = list.filter(t => {
-                const symbol = t.symbol ?? "";
-                const name = t.name ?? "";
-                const category = t.tokenCategory;
-                return (
-                    symbol.toLowerCase().includes(q) ||
-                    name.toLowerCase().includes(q) ||
-                    category.toLowerCase().includes(q)
-                );
-            });
-        }
-
-        // Sort
-        const sorted = [...list];
+        // Sort the currently loaded tokens on the client.
+        const sorted = [...tokens];
         if (sortMode === "tvl") {
             sorted.sort((a, b) => b.tvlBch - a.tvlBch);
         } else if (sortMode === "priceAsc") {
@@ -85,9 +128,7 @@ export default function TokensTable() {
             sorted.sort((a, b) => b.volume30dBch - a.volume30dBch);
         }
         return sorted;
-    }, [tokens, search, sortMode]);
-
-    const PAGE_SIZE = 25;
+    }, [tokens, sortMode]);
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     const visibleTokens = useMemo(
@@ -95,9 +136,17 @@ export default function TokensTable() {
         [filteredTokens, visibleCount],
     );
 
-    const hasMore = filteredTokens.length > visibleCount;
+    // Reset pagination when search or sort mode changes so we always start
+    // from the first "page" of the current result set.
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE);
+    }, [debouncedSearch, sortMode]);
 
-    if (loading && !tokens.length) {
+    // There are more results on the backend if our current offset is
+    // still behind the reported total.
+    const hasMore = offset < total;
+
+    if (!debouncedSearch && loading && !tokens.length) {
         return (
             <div className="rounded-[24px] border bg-popover flex items-center justify-center py-10 px-6 text-muted-foreground">
                 Loading tokens…
@@ -113,7 +162,8 @@ export default function TokensTable() {
         );
     }
 
-    if (!tokens.length) {
+    // No tokens at all (and not searching): show a simple empty state.
+    if (!debouncedSearch && !tokens.length && !loading) {
         return (
             <div className="rounded-[24px] border bg-popover py-6 px-6 text-sm text-muted-foreground">
                 No tokens yet.
@@ -203,6 +253,16 @@ export default function TokensTable() {
                     className="w-full min-w-0 rounded-full border bg-background/40 px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground/70 md:w-56"
                 />
             </div>
+
+            {debouncedSearch && (
+                <div className="px-1 text-[11px] text-muted-foreground">
+                    {loading
+                        ? "Searching tokens…"
+                        : visibleTokens.length === 0
+                          ? "No tokens match your search."
+                          : null}
+                </div>
+            )}
 
             {/* Mobile: card list */}
             <div className="md:hidden space-y-2">
@@ -377,12 +437,16 @@ export default function TokensTable() {
             {hasMore && (
                 <button
                     type="button"
-                    onClick={() =>
-                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filteredTokens.length))
-                    }
+                    onClick={() => {
+                        // Increase the visible window first so when new data
+                        // arrives it becomes immediately visible.
+                        setVisibleCount(prev => Math.min(prev + PAGE_SIZE, total));
+                        void loadPage(offset, debouncedSearch, false);
+                    }}
+                    disabled={loading}
                     className="mt-2 self-center inline-flex items-center justify-center rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium text-foreground hover:bg-background transition-colors"
                 >
-                    Load more
+                    {loading ? "Loading…" : "Load more"}
                 </button>
             )}
         </div>
