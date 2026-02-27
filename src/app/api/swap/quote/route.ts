@@ -5,7 +5,6 @@ import { getQuote } from "@/dapp/queries/price";
 import { getBestPoolForToken } from "@/dapp/queries/registry";
 import { findBestRouteForBchToToken, findBestRouteForTokenToBch } from "@/dapp/swap/router";
 import { SwapDirection, SwapType } from "@/dapp/types";
-import { getAuthFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +31,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { direction, swapType, tokenCategory, amount, slippageTolerance } = body;
-
-    const auth = getAuthFromRequest(request);
-    if (!auth) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     if (
         !direction ||
